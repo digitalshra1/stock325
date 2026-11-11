@@ -111,6 +111,10 @@ def build(res: dict, cfg: dict, password: str | None = None, positions: dict | N
     data = _round(data)
     data["repo"] = {"name": os.environ.get("GITHUB_REPOSITORY"), "branch": os.environ.get("GITHUB_REF_NAME") or "main"}
     pw = find_password(password) if use_saved_password else password
+    if not pw and os.environ.get("GITHUB_ACTIONS") and not data.get("demo"):
+        # never publish an unlocked dashboard to the internet
+        raise SystemExit("APP_PASSWORD secret is missing: refusing to build an unlocked dashboard for publishing. "
+                         "Add it in Settings → Secrets and variables → Actions.")
     d = out_dir or SITE_DIR
     d.mkdir(parents=True, exist_ok=True)
     if len(data.get("stocks", {})) > SPLIT_ABOVE:
