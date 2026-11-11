@@ -25,7 +25,7 @@ def _file_values() -> dict[str, str]:
 
 
 def get_secret(name: str) -> str | None:
-    v = os.environ.get(name)
+    v = (os.environ.get(name) or "").strip()  # pasted secrets often carry a trailing line break
     if v:
         return v
     v = _file_values().get(name)

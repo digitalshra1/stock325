@@ -10,3 +10,4 @@ output/
 data/state/*.tmp
 .claude/
 STOCK_PATTERN_TOOL_PROMPT.md
+set_secrets.ps1
