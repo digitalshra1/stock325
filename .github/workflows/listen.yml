@@ -1,0 +1,31 @@
+# Outside market hours: reply to your Telegram commands (/buy, /sell, /positions …).
+name: Telegram commands
+
+on:
+  schedule:
+    - cron: "*/30 0-2,11-23 * * 1-5"   # every 30 min on weekdays outside 08:30–16:30 IST (the monitor covers market hours)
+    - cron: "*/30 * * * 0,6"           # every 30 min on Saturday and Sunday
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nsepattern-state
+  cancel-in-progress: false
+
+jobs:
+  listen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: python -m nsepattern listen
+      - uses: ./.github/actions/save
+        if: always()

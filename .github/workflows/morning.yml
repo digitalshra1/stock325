@@ -1,0 +1,53 @@
+# Morning: refresh global markets (US/Europe closed overnight) → expected NIFTY opening → Telegram + dashboard.
+name: Morning global cues
+
+on:
+  schedule:
+    - cron: "15 3 * * 1-5"   # 08:45 IST, Mon–Fri
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: nsepattern-state
+  cancel-in-progress: false
+
+jobs:
+  morning:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          full-data: "true"
+      - run: python -m nsepattern morning
+      - uses: ./.github/actions/save
+        if: always()
+        with:
+          results: "true"
+          data: "true"
+      - name: Package the dashboard
+        if: hashFiles('output/site/index.html') != ''
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: output/site
+
+  deploy:
+    needs: morning
+    if: needs.morning.result == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - id: pages
+        uses: actions/deploy-pages@v4

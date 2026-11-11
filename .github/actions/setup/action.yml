@@ -1,0 +1,29 @@
+name: Setup
+description: Python, packages, and the data saved by earlier runs
+inputs:
+  full-data:
+    description: "Also restore the big data cache (3 years of prices, fundamentals, NSE files)"
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: pip
+    - name: Install packages
+      shell: bash
+      run: pip install -q -r requirements.txt
+    - name: Restore last results (lists, dashboard data)
+      uses: actions/cache/restore@v4
+      with:
+        path: output
+        key: out-${{ github.run_id }}
+        restore-keys: out-
+    - name: Restore data cache
+      if: inputs.full-data == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: data/cache
+        key: data-${{ github.run_id }}
+        restore-keys: data-

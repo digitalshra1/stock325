@@ -1,0 +1,9 @@
+pandas>=2.0
+numpy>=1.24
+yfinance>=0.2.40
+requests>=2.31
+pyyaml>=6.0
+cryptography>=42
+feedparser>=6.0
+pytest>=8.0
+# pillow>=10.0  # only needed on your PC to regenerate the logo files (make_brand_assets)

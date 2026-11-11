@@ -1,0 +1,41 @@
+name: Save
+description: Keep caches for the next run and commit the encrypted state files
+inputs:
+  results:
+    description: "Save the results cache (after a scan)"
+    default: "false"
+  data:
+    description: "Save the big data cache (after a scan)"
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Save results cache
+      if: inputs.results == 'true'
+      continue-on-error: true
+      uses: actions/cache/save@v4
+      with:
+        path: output
+        key: out-${{ github.run_id }}-${{ github.run_attempt }}
+    - name: Save data cache
+      if: inputs.data == 'true'
+      continue-on-error: true
+      uses: actions/cache/save@v4
+      with:
+        path: data/cache
+        key: data-${{ github.run_id }}-${{ github.run_attempt }}
+    - name: Commit encrypted state
+      shell: bash
+      run: |
+        git config user.name "3.25-bot"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add data/state data/universe 2>/dev/null || true
+        if git diff --cached --quiet; then echo "Nothing new to save"; exit 0; fi
+        git commit -q -m "Update encrypted state [skip ci]"
+        for i in 1 2 3; do
+          # if the dashboard saved at the same moment, keep this run's version of a clashing file
+          if git pull -q --rebase -X theirs && git push -q; then echo "Saved"; exit 0; fi
+          git rebase --abort 2>/dev/null || true
+          sleep $((i * 7))
+        done
+        echo "::error::Could not save the state files (another save kept clashing)"; exit 1

@@ -1,0 +1,66 @@
+# Evening full scan → dashboard → evening Telegram alerts and summary.
+# GitHub's clock is UTC. IST = UTC + 5:30. GitHub may start scheduled runs a few minutes late.
+name: Evening scan
+
+on:
+  schedule:
+    - cron: "15 13 * * 1-5"   # 18:45 IST, Mon–Fri: full scan (after NSE publishes its day files)
+    - cron: "0 15 * * 1-5"    # 20:30 IST, Mon–Fri: backup — only works if the 18:45 run was missed
+  workflow_dispatch:           # "Run workflow" button on GitHub
+    inputs:
+      weekly:
+        description: "Also refresh the stock list and fundamentals"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # save the encrypted state files
+  pages: write      # publish the dashboard
+  id-token: write
+
+concurrency:
+  group: nsepattern-state   # never run two jobs at once (they share the same files)
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          full-data: "true"
+      - name: Evening scan
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 15 * * 1-5" ]; then
+            python -m nsepattern evening --if-missed
+          else
+            python -m nsepattern evening ${{ inputs.weekly && '--weekly' || '' }}
+          fi
+      - uses: ./.github/actions/save
+        if: always()
+        with:
+          results: "true"
+          data: "true"
+      - name: Package the dashboard
+        if: hashFiles('output/site/index.html') != ''
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: output/site
+
+  deploy:
+    needs: scan
+    if: needs.scan.result == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - id: pages
+        uses: actions/deploy-pages@v4

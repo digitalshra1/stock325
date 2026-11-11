@@ -1,0 +1,175 @@
+# =====================================================================
+#  NSE Down-Streak Pattern Tool - settings
+#  Edit any value below. Lines starting with # are comments (ignored).
+#  Percentages are written as plain numbers: 3.25 means 3.25 %.
+# =====================================================================
+
+# ---------- Your trading rules ----------
+trading:
+  target_pct: 3.25            # Sell-watch target above YOUR buy price (+3.25 %)
+  upside_step_pct: 1.0        # After the target, alert again at every further +1 % (4.25, 5.25 ...)
+  downside_warn_pct: 2.0      # First warning when price is 2 % below your buy
+  downside_step_pct: 1.0      # Then warn again at every further -1 % (-3, -4, -5 ...)
+  monthly_trade_goal: 4       # Trades you want per month (shown as goal progress)
+
+# ---------- Data ----------
+data:
+  history_years: 3            # Years of daily history used to learn each stock's habit
+  extra_history_days: 320     # Extra days fetched before that, only so the 200-day average exists for old trades
+  download_chunk_size: 40     # Stocks per yfinance download request
+  download_sleep_sec: 2.0     # Pause between download chunks (be polite to Yahoo)
+  nse_sleep_sec: 0.5          # Pause between requests to NSE websites
+  retries: 3                  # How many times to retry a failed download
+  shareholding_max_age_days: 7        # Shareholding / pledge data older than this is refreshed ...
+  shareholding_refresh_per_run: 250   # ... but at most this many stocks per run (spreads the load on NSE over the week)
+
+# ---------- Stock filters (section 6) ----------
+filters:
+  liquidity_min_crore: 5.0    # Average daily traded value (close x volume) over 60 days must be at least this (Rs crore)
+  liquidity_days: 60          # Days used for the liquidity average
+  mover_days: 60              # Days used for the "fast daily mover" statistics
+  mover_min_avg_range_pct: 2.0  # Average daily (High-Low)/Open must be at least this % to count as a fast mover
+  mover_up_levels: [1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.25]   # Your old sheet's + columns (from the open)
+  mover_down_levels: [1.0, 1.25, 1.5, 1.75, 2.0]            # Your old sheet's - columns (from the open)
+  show_unknown_fundamentals_on_main: true   # Stocks with too little fundamental data may appear on main, tagged "data incomplete"
+  exclude_price_bands: [2, 5]  # Stocks in these NSE price bands (%) are excluded from buy lists
+
+# ---------- Fundamentals grade (section 6.1) ----------
+fundamentals:
+  max_debt_to_equity: 1.5     # Above this = red flag (not applied to banks / financial services)
+  min_revenue_growth_pct: -10 # Revenue growth below this = red flag
+  min_earnings_growth_pct: -30  # Earnings growth below this = red flag
+  min_roe_pct: 5              # Return on equity below this = red flag
+  max_pledge_pct: 20          # Promoter pledge above this = red flag (also a flag if pledge rose this quarter)
+  min_known_metrics: 3        # Fewer known metrics than this = grade UNKNOWN
+
+# ---------- Pattern engine (section 7) ----------
+pattern:
+  pause_max_green_pct: 0.30   # ONE green day smaller than this does not break a streak
+  max_pauses: 1               # How many such small green days are allowed inside one streak
+  min_down_days: 2            # Streaks shorter than this are ignored
+  meaningful_depth_pct: -2.0  # Streaks must fall at least this much (from the start) to be used for the profile
+  usual_days_from: deeper_half  # "deeper_half" = usual fall length measured on the deeper half of falls (decided 2026-11-11); "all" = all falls
+  deep_fall_pct: -9.0         # Falls this deep go to the Deep-Fall watchlist
+  deep_recent_days: 10        # Also keep streaks that ended this many trading days ago and were deep
+  your_method_factor: 0.95    # "Your method" buy level = usual depth x this (e.g. -5.0 % -> -4.75 %)
+  test_level_from_pct: -3.0   # Best-tested search starts here ...
+  test_level_to_pct: -9.0     # ... and ends here
+  test_level_step_pct: 0.5    # ... in steps of this size
+  stats_window_days: 30       # Days a historical trade is followed to measure the result (NOT a hold limit for you)
+  min_trades_for_best: 6      # A level needs at least this many past trades to be chosen as "best tested"
+  confidence_high_trades: 15  # Trades needed for "High" confidence
+  confidence_medium_trades: 8 # Trades needed for "Medium" confidence (below = "Low")
+  trend_sma_days: 200         # Uptrend = start price above this moving average
+  last_trades_shown: 15       # Historical trades shown on a stock's detail view
+
+# ---------- Current status (section 7.4) ----------
+status:
+  ready_within_pct: 0.75      # READY when close is within this % above the buy price (or today's low touched it)
+  close_within_pct: 2.5       # GETTING CLOSE when within this % above the buy price ...
+  close_days_before_usual: 1  # ... or when days in streak >= usual length minus this
+  status_level: best_tested   # Which buy level drives the status: best_tested or your_method
+
+# ---------- Market mood (section 8) ----------
+market_mood:
+  nifty_1d_drop_pct: -1.5     # NIFTY falls this much in 1 day -> +1 point
+  nifty_5d_drop_pct: -4.0     # NIFTY falls this much in 5 days -> +1 point
+  india_vix_level: 20         # India VIX at or above this -> +1 point
+  india_vix_5d_rise_pct: 25   # India VIX up this much in 5 days -> +1 point
+  sp500_1d_drop_pct: -2.0     # S&P 500 falls this much in 1 day -> +1 point
+  us_vix_level: 25            # US VIX at or above this -> +1 point
+  brent_5d_rise_pct: 8        # Brent crude up this much in 5 days -> +1 point
+  usdinr_5d_rise_pct: 1.5     # USD/INR up this much in 5 days (rupee weaker) -> +1 point
+  breadth_down_pct: 80        # This % of all stocks closing down today -> +1 point
+  breadth_min_stocks: 100     # Breadth is only measured when at least this many stocks have data
+  caution_points: 2           # 2-3 points = CAUTION
+  stressed_points: 4          # 4 or more points = STRESSED
+
+# ---------- Checklist and ranking (section 9) ----------
+checks:
+  news_days: 14               # Look back this many days for news
+  results_soon_days: 5        # Results within this many days = warning
+  results_recent_days: 3      # Results released in the last this many days = warning
+  panic_volume_ratio: 2.0     # Volume during the fall above this x the 20-day average = warning
+  support_band_pct: 2.0       # Buy price within this % of an old bounce low = near support
+  bulk_deal_days: 30          # Look back this many days for bulk / block deals
+  big_deal_pct_of_shares: 0.25  # Net selling in bulk/block deals above this % of all shares = warning
+  why_ok_excess_pct: -3.0     # Stock fell no more than 3 % more than its industry/NIFTY over the same days = market-driven (OK)
+  why_bad_excess_pct: -7.0    # Fell more than 7 % more than its industry/NIFTY = falling alone (bad); in between = warning
+  delivery_high_ratio: 1.25   # Delivery % during the fall above 1.25 x its 60-day average = real investors exiting (warning)
+  delivery_days: 60           # Days used for the average delivery %
+  volume_avg_days: 20         # Days used for the average volume
+  near_52w_low_pct: 3.0       # Buy price within this % of the 52-week low = near support
+  # Words that flag a headline as negative (whole words, any case). Edit freely.
+  negative_keywords: [fraud, sebi, raid, probe, investigation, downgrade, default, resign, resignation,
+    auditor, penalty, fine, pledge, loss, plunge, lawsuit, ban, insolvency, nclt, gst notice,
+    income tax, ed, cbi, recall, strike, fire, shutdown]
+
+ranking_weights:              # Weights (out of 100) used to sort buy candidates
+  hit_rate: 35
+  confidence: 10
+  speed: 10
+  risk: 15
+  mover: 15
+  trend: 15
+
+# ---------- Alerts ----------
+alerts:
+  getting_close_alerts: false # Also send an alert when a stock becomes GETTING CLOSE
+  weak_buy_alerts: false      # Send buy alerts for WEAK-fundamental stocks (off: they stay in their own section)
+  telegram_max_len: 4000      # Long messages are split at this many characters
+
+# =====================================================================
+#  ADD-ON MODULES (new layer; the settings above are unchanged)
+# =====================================================================
+
+# ---------- Pattern 3: Volatility Contraction Pattern (VCP, Mark Minervini style) ----------
+vcp:
+  lookback_days: 120          # Days examined for the base (consolidation)
+  pivot_window: 5             # A swing high/low must be the highest/lowest within +/- this many days
+  min_contractions: 2         # The latest pullbacks must shrink: at least this many in a row, each smaller than the one before
+  contraction_tolerance: 1.10 # A pullback may be up to 10 % larger than the previous and still count as "shrinking"
+  max_last_contraction_pct: 12  # The last pullback must be no deeper than this % (tight structure)
+  tight_days: 10              # Days used for the "tight price structure" check
+  max_tight_range_pct: 10     # High-low range over those days must be within this % of price
+  atr_days: 14                # ATR period
+  atr_compare_days: 30        # ATR now must be lower than ATR this many days ago
+  dryup_days: 10              # Recent volume window ...
+  volume_avg_days: 50         # ... must be below this longer average (volume drying up)
+  breakout_volume_ratio: 1.5  # Breakout day volume must be at least 1.5 x the 50-day average
+  breakout_recent_days: 5     # A breakout in the last N days still counts as "breakout"
+  setup_min_score: 6          # Conditions (out of 7, excluding breakout) needed to call it a VCP setup
+  target_pct: 3.25            # Target used to measure VCP history (same as your trading target)
+  stats_window_days: 30       # Days a historical VCP breakout is followed
+
+# ---------- Global markets ----------
+global_markets:
+  history_years: 3            # Years used for the global -> India relationship
+  tickers:                    # Name: Yahoo symbol (Gift Nifty has no free feed -> shown as N/A)
+    Dow Jones: "^DJI"
+    Nasdaq: "^IXIC"
+    S&P 500: "^GSPC"
+    Russell 2000: "^RUT"
+    DAX: "^GDAXI"
+    FTSE 100: "^FTSE"
+    CAC 40: "^FCHI"
+    Nikkei 225: "^N225"
+    Hang Seng: "^HSI"
+    Shanghai: "000001.SS"
+  min_move_pct: 0.0           # A global day counts as "positive"/"negative" when its move is beyond this
+  rolling_corr_days: 60       # Window for the rolling correlation chart
+
+# ---------- Synced personal data (watchlist, trades, alerts) ----------
+user_state:
+  file: data/state/userstate.enc.json   # Encrypted with APP_PASSWORD; the dashboard and Telegram commands save here
+  bot_file: data/state/botstate.enc.json # Encrypted: which alerts were already sent, Telegram read position, last mood
+  stop_loss_alerts: true      # Telegram alert when a trade touches its stop loss
+
+# ---------- Telegram (step 4) ----------
+telegram:
+  dashboard_url: ""           # Link shown in the evening summary (filled in when the dashboard goes online)
+  market_open: "09:15"        # IST: price alerts are checked between these times on weekdays
+  market_close: "15:30"
+  zone_alerts: true           # Intraday "touched your buy level" alerts for READY / GETTING CLOSE stocks
+  evening_top_n: 5            # READY stocks listed in the evening summary
+  morning_outlook: true       # 8:45 message with global cues and the expected NIFTY opening
