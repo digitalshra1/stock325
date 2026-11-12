@@ -38,6 +38,15 @@ def build_profile(streaks: list[Streak], cfg: dict) -> dict:
     }
 
 
+def _getting_close(gap: float, days: int, usual_days: float | None, st: dict) -> bool:
+    """close_rule "and" (default, decided 2026-11-13): price within close_within_pct of the buy price
+    AND the fall has lasted at least usual days − close_days_before_usual.
+    close_rule "or" (original): either condition is enough."""
+    near = gap <= st["close_within_pct"]
+    mature = usual_days is not None and days >= usual_days - st["close_days_before_usual"]
+    return (near and mature) if st.get("close_rule", "and") == "and" else (near or mature)
+
+
 def current_status(df: pd.DataFrame, streaks: list[Streak], profile: dict, bt: dict, cfg: dict) -> dict:
     """Status of the stock on the last row of df (7.4)."""
     p, st = cfg["pattern"], cfg["status"]
@@ -86,8 +95,7 @@ def current_status(df: pd.DataFrame, streaks: list[Streak], profile: dict, bt: d
             s = "DEEP"
         elif touched or gap <= st["ready_within_pct"]:
             s = "READY"
-        elif gap <= st["close_within_pct"] or (
-                usual_days is not None and cur.down_days >= usual_days - st["close_days_before_usual"]):
+        elif _getting_close(gap, cur.down_days, usual_days, st):
             s = "GETTING CLOSE"
         else:
             s = "FORMING"

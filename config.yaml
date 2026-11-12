@@ -66,8 +66,9 @@ pattern:
 # ---------- Current status (section 7.4) ----------
 status:
   ready_within_pct: 0.75      # READY when close is within this % above the buy price (or today's low touched it)
-  close_within_pct: 2.5       # GETTING CLOSE when within this % above the buy price ...
-  close_days_before_usual: 1  # ... or when days in streak >= usual length minus this
+  close_within_pct: 2.5       # GETTING CLOSE needs the close within this % above the buy price ...
+  close_days_before_usual: 1  # ... AND days in the fall >= usual length minus this
+  close_rule: and             # "and" = both conditions (precise, decided 2026-11-13); "or" = either one (original, wider list)
   status_level: best_tested   # Which buy level drives the status: best_tested or your_method
 
 # ---------- Market mood (section 8) ----------

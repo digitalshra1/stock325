@@ -102,3 +102,13 @@ def test_usual_days_from_deeper_half():
     c["pattern"]["usual_days_from"] = "all"
     assert build_profile(streaks, c)["usual_days"] == 3.0          # all falls (old way)
     assert build_profile(streaks, c)["usual_depth_pct"] == pytest.approx(-3.0)  # depth unchanged
+
+
+def test_getting_close_rule_and_vs_or():
+    from nsepattern.engine.profile import _getting_close
+    st = {"close_within_pct": 2.5, "close_days_before_usual": 1, "close_rule": "and"}
+    assert _getting_close(2.0, 3, 4, st)            # near and mature
+    assert not _getting_close(2.0, 2, 4, st)        # near but too early in the fall
+    assert not _getting_close(8.7, 3, 4, st)        # mature but far from the buy price
+    st["close_rule"] = "or"
+    assert _getting_close(8.7, 3, 4, st) and _getting_close(2.0, 2, 4, st)

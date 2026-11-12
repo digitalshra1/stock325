@@ -498,7 +498,7 @@ const nameOf = s => D.stocks[s]?.name || X.vcp?.[s]?.name || s;
 const TIPS = {
   "stock":"NSE symbol and its industry. ‘data incomplete’ = fewer than 3 fundamental numbers were available.",
   "ltp":"Last traded price and % change vs the previous close. ‘live’ = about 15-minute delayed price (local server, market hours).",
-  "status":"READY: close within 0.75% above the buy price, or today’s low touched it. GETTING CLOSE: within 2.5%, or days in the fall ≥ usual − 1. FORMING: in a fall, not close yet. DEEP: 9%+ below the fall’s start. Uses the best tested level.",
+  "status":"READY: close within 0.75% above the buy price, or today’s low touched it. GETTING CLOSE: close within 2.5% above the buy price AND the fall has lasted at least usual days − 1. FORMING: in a fall, not close yet. DEEP: 9%+ below the fall’s start. Uses the best tested level.",
   "days now / usual":"Down days so far in this fall vs this stock’s usual length (middle value of its own deeper past falls).",
   "fall now / usual":"Deepest low of this fall vs its start price (P0), compared with this stock’s usual fall depth.",
   "buy: your method":"Buy price at your method’s level (usual fall × 0.95), with that level’s past hit rate (+3.25% within 30 trading days).",
