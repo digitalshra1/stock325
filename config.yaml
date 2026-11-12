@@ -168,7 +168,7 @@ user_state:
 
 # ---------- Telegram (step 4) ----------
 telegram:
-  dashboard_url: ""           # Link shown in the evening summary (filled in when the dashboard goes online)
+  dashboard_url: "https://stock.imageum.in/"   # Link shown in the evening summary
   market_open: "09:15"        # IST: price alerts are checked between these times on weekdays
   market_close: "15:30"
   zone_alerts: true           # Intraday "touched your buy level" alerts for READY / GETTING CLOSE stocks
