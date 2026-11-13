@@ -763,6 +763,7 @@ function staleBanner(){
   const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
   const exp = new Date(now); if(now.getHours()*60+now.getMinutes() < 19*60+30) exp.setDate(exp.getDate()-1);
   while(exp.getDay()===0 || exp.getDay()===6) exp.setDate(exp.getDate()-1);
+  exp.setHours(0,0,0,0);  // compare dates only (the time of day must not count as an extra day)
   const d = new Date(D.data_date+"T00:00:00"); let gap=0; const c=new Date(d);
   while(c < exp){ c.setDate(c.getDate()+1); if(c.getDay()!==0 && c.getDay()!==6) gap++; }
   if(gap < 1) return "";

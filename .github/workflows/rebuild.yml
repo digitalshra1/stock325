@@ -1,0 +1,40 @@
+# Manual only: rebuild the dashboard from the latest saved results and publish it.
+# Use after a design/text change. No scan, no Telegram messages.
+name: Rebuild dashboard
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: nsepattern-state
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: python -m nsepattern dashboard
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: output/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - id: pages
+        uses: actions/deploy-pages@v4
