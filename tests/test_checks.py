@@ -111,3 +111,19 @@ def test_fundamentals_never_downgraded_and_capped(tmp_path, monkeypatch):
     calls.clear()
     F.get_fundamentals(["AAA"], max_age_days=30)
     assert calls == []                                 # AAA was just tried: not retried for a week
+
+
+def test_shareholding_keeps_saved_copy_when_nse_blocks(tmp_path, monkeypatch):
+    import json
+    from datetime import date, timedelta
+    from nsepattern.data import nse
+    monkeypatch.setattr(nse, "SHP_DIR", tmp_path)
+    saved = {"promoter": 55.0, "pledge": 0.0, "fii": 20.0, "dii": 15.0,
+             "fetched": (date.today() - timedelta(days=90)).isoformat()}
+    (tmp_path / "ABC.json").write_text(json.dumps(saved))
+    monkeypatch.setattr(nse, "_get_json", lambda *a, **k: None)      # NSE refuses (cloud)
+    assert nse.shareholding_age("ABC") == 90
+    out = nse.shareholding(None, "ABC", max_age_days=30)            # stale -> tries, fails
+    assert out["promoter"] == 55.0 and out["fii"] == 20.0           # last good copy returned
+    assert json.loads((tmp_path / "ABC.json").read_text())["fetched"] == saved["fetched"]  # not overwritten
+    assert nse.shareholding_age("NEW") >= 1e9

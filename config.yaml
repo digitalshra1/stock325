@@ -20,7 +20,7 @@ data:
   download_sleep_sec: 2.0     # Pause between download chunks (be polite to Yahoo)
   nse_sleep_sec: 0.5          # Pause between requests to NSE websites
   retries: 3                  # How many times to retry a failed download
-  shareholding_max_age_days: 7        # Shareholding / pledge data older than this is refreshed ...
+  shareholding_max_age_days: 30       # Shareholding / pledge data (quarterly) older than this is refreshed ...
   shareholding_refresh_per_run: 250   # ... but at most this many stocks per run (spreads the load on NSE over the week)
 
 # ---------- Stock filters (section 6) ----------

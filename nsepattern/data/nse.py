@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 
 import pandas as pd
 
-from nsepattern.config import CACHE_DIR
+from nsepattern.config import CACHE_DIR, ROOT
 from nsepattern.data.http import PoliteSession
 
 log = logging.getLogger("nsepattern.nse")
@@ -207,17 +207,36 @@ def _parse_shp_xbrl(text: str) -> dict:
     return out
 
 
-def shareholding(sess: PoliteSession, symbol: str, max_age_days: float = 6) -> dict:
+SHP_DIR = ROOT / "data" / "shareholding"  # kept in the repository: changes only quarterly, and NSE's API
+                                          # blocks cloud servers, so the last good copy must survive
+
+
+def _shp_saved(symbol: str) -> dict | None:
+    f = SHP_DIR / f"{symbol}.json"
+    try:
+        return json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+    except ValueError:
+        return None
+
+
+def shareholding_age(symbol: str) -> float:
+    """Days since this stock's shareholding was downloaded (1e9 if never)."""
+    d = _shp_saved(symbol)
+    try:
+        return (date.today() - date.fromisoformat(d["fetched"])).days
+    except (TypeError, KeyError, ValueError):
+        return 1e9
+
+
+def shareholding(sess: PoliteSession, symbol: str, max_age_days: float = 30) -> dict:
     """Latest and previous quarter promoter / FII / DII %, and promoter pledge %.
 
-    Keys present only when available (missing -> N/A in the UI).
+    Keys present only when available (missing -> N/A in the UI). A failed download never
+    replaces the saved copy.
     """
-    cache = f"shp_{symbol}.json"
-    if _age_days(cache) < max_age_days:
-        try:
-            return json.loads(_load(cache))
-        except (TypeError, ValueError):
-            pass
+    old = _shp_saved(symbol)
+    if old is not None and shareholding_age(symbol) < max_age_days:
+        return old
     out: dict = {}
     master = _get_json(sess, f"{API}/corporate-share-holdings-master?index=equities&symbol={symbol}",
                        f"shpmaster_{symbol}.json")
@@ -264,15 +283,12 @@ def shareholding(sess: PoliteSession, symbol: str, max_age_days: float = 6) -> d
         elif not data:
             out["pledge"] = 0.0  # NSE lists no pledge disclosure for this company
     # remember the previous pledge value to detect "pledge increased this quarter"
-    old = None
-    try:
-        old = json.loads(_load(cache) or "null")
-    except ValueError:
-        pass
     if "pledge" in out and "pledge_chg" not in out and old and "pledge" in old and old.get("quarter") != out.get("quarter"):
         out["pledge_chg"] = out["pledge"] - old["pledge"]
-    if out:  # never cache an empty result (NSE unreachable): retry next run instead of N/A for a week
-        _save(cache, json.dumps(out))
+    if out:  # never save an empty result (NSE unreachable): keep the last good copy instead
+        out["fetched"] = date.today().isoformat()
+        SHP_DIR.mkdir(parents=True, exist_ok=True)
+        (SHP_DIR / f"{symbol}.json").write_text(json.dumps(out), encoding="utf-8")
     elif old:
         return old  # last good copy
     return out

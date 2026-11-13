@@ -127,11 +127,11 @@ def run_full(cfg: dict, weekly: bool = False, limit: int | None = None) -> dict:
     # Shareholding changes only quarterly: refresh at most N stale stocks per run, so the load on
     # NSE is spread over the week (a burst of 1,000+ requests gets blocked).
     shp_cap = cfg["data"].get("shareholding_refresh_per_run", 250)
-    shp_age = cfg["data"].get("shareholding_max_age_days", 7)
+    shp_age = cfg["data"].get("shareholding_max_age_days", 30)
     shp_done = 0
     for i, s in enumerate(movers, 1):
         a = analyse_stock(prices[s], cfg, mood_series)
-        age = nse._age_days(f"shp_{s}.json")
+        age = nse.shareholding_age(s)
         if age >= 1e9 or (age > shp_age and shp_done < shp_cap):
             shp = nse.shareholding(sess, s, max_age_days=0)
             shp_done += 1

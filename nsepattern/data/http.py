@@ -55,8 +55,8 @@ class PoliteSession:
         until = self._paused.get(host, 0)
         if until > time.time():
             return None
-        if "nseindia.com" in url:
-            self.warm_nse()
+        if host == "www.nseindia.com":  # only the API site needs cookies; the file server (nsearchives) does not,
+            self.warm_nse()             # and the warm-up is blocked from cloud servers
         for attempt in range(1, self.retries + 1):
             try:
                 self._wait()
