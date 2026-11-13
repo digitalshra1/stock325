@@ -1,0 +1,28 @@
+# Manual only: checks which NSE file addresses GitHub's servers can reach (changes nothing).
+name: Check data sources
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Try NSE addresses
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+          D=$(TZ=Asia/Kolkata date -d "last friday" +%d%m%Y)
+          for u in \
+            "https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_${D}.csv" \
+            "https://archives.nseindia.com/products/content/sec_bhavdata_full_${D}.csv" \
+            "https://www1.nseindia.com/products/content/sec_bhavdata_full_${D}.csv" \
+            "https://nsearchives.nseindia.com/archives/equities/mto/MTO_${D}.DAT" \
+            "https://archives.nseindia.com/archives/equities/mto/MTO_${D}.DAT" \
+            "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv" ; do
+            code=$(curl -s -o /tmp/f -w "%{http_code}" -A "$UA" -H "Accept: */*" -H "Referer: https://www.nseindia.com/" --max-time 25 "$u")
+            echo "$code  $(wc -c < /tmp/f) bytes  $u"
+          done
