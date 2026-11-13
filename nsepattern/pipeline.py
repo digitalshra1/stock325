@@ -110,7 +110,7 @@ def run_full(cfg: dict, weekly: bool = False, limit: int | None = None) -> dict:
     log.info("Liquid (>= %.0f cr): %d; liquid fast movers with 1y+ history: %d",
              f["liquidity_min_crore"], len(liquid), len(movers))
 
-    fund = get_fundamentals(liquid, max_age_days=0 if weekly else 7)
+    fund = get_fundamentals(liquid, cfg["fundamentals"].get("max_age_days", 30), cfg["fundamentals"].get("refresh_per_run", 150))
     industries = {s: ind_map.get(s) or (fund.get(s) or {}).get("yf_sector") or "Other" for s in prices}
     ind_pe = industry_pe({s: fund[s] for s in liquid if s in fund}, industries)
     ind_idx = industry_indices(prices, industries, liquid)

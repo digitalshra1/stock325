@@ -161,7 +161,7 @@ def run_extras(cfg: dict, prices: dict[str, pd.DataFrame] | None = None) -> dict
     from nsepattern.data.fundamentals import get_fundamentals
     from nsepattern.data import nse
     from nsepattern.data.http import PoliteSession
-    fund = get_fundamentals(list(liquid), max_age_days=7)
+    fund = get_fundamentals(list(liquid), cfg["fundamentals"].get("max_age_days", 30), cfg["fundamentals"].get("refresh_per_run", 150))
     ind_map = nse.industry_map(PoliteSession(cfg["data"]["nse_sleep_sec"], cfg["data"]["retries"]))
     vres = {}
     for i, (s, d) in enumerate(liquid.items(), 1):

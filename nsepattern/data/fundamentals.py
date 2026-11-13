@@ -16,10 +16,10 @@ from datetime import date, datetime
 import pandas as pd
 import yfinance as yf
 
-from nsepattern.config import CACHE_DIR
+from nsepattern.config import ROOT
 
 log = logging.getLogger("nsepattern.fund")
-FUND_DIR = CACHE_DIR / "fundamentals"
+FUND_DIR = ROOT / "data" / "fundamentals"  # kept in the repository (changes only quarterly)
 FIN_WORDS = ("bank", "financial", "finance", "insurance", "nbfc", "capital markets", "credit")
 
 
@@ -86,26 +86,59 @@ def fetch_one(symbol: str) -> dict:
     return out
 
 
-def get_fundamentals(symbols: list[str], max_age_days: float = 7, sleep: float = 0.3) -> dict[str, dict]:
-    """Cached per symbol; refreshed when older than max_age_days (weekly)."""
+METRICS = ("eps", "profit_margin", "debt_to_equity", "revenue_growth", "earnings_growth", "roe")
+
+
+def known_count(d: dict | None) -> int:
+    return sum(1 for k in METRICS if (d or {}).get(k) is not None)
+
+
+def _age_days(d: dict | None, key: str) -> float:
+    try:
+        return (date.today() - date.fromisoformat((d or {}).get(key) or "")).days
+    except ValueError:
+        return 1e9
+
+
+def get_fundamentals(symbols: list[str], max_age_days: float = 30, max_refresh: int = 150,
+                     retry_days: float = 7, sleep: float = 0.5) -> dict[str, dict]:
+    """Fundamentals change quarterly, so they are kept in the repository (data/fundamentals) and refreshed slowly:
+    * a stock is refreshed when its data is older than max_age_days, at most max_refresh stocks per run;
+    * a refresh that returns FEWER numbers than what is saved never replaces it (Yahoo often refuses
+      cloud servers) — the saved data is kept and that stock is retried after retry_days;
+    * a failed first download is not saved, so it is retried on the next run.
+    Freshness uses the date stored inside the file (file times are meaningless after a git checkout)."""
     FUND_DIR.mkdir(parents=True, exist_ok=True)
-    out = {}
-    fetched = 0
+    out, tried, upgraded, kept = {}, 0, 0, 0
     for s in symbols:
         p = FUND_DIR / f"{s}.json"
-        if p.exists() and (time.time() - p.stat().st_mtime) / 86400 < max_age_days:
+        old = None
+        if p.exists():
             try:
-                out[s] = json.loads(p.read_text(encoding="utf-8"))
-                continue
+                old = json.loads(p.read_text(encoding="utf-8"))
             except ValueError:
-                pass
-        d = fetch_one(s)
-        p.write_text(json.dumps(d), encoding="utf-8")
-        out[s] = d
-        fetched += 1
-        if fetched % 50 == 0:
-            log.info("Fundamentals fetched: %d", fetched)
+                old = None
+        stale = old is None or _age_days(old, "fetched") > max_age_days
+        recently_tried = old is not None and _age_days(old, "attempted") < retry_days
+        if not stale or recently_tried or tried >= max_refresh:
+            if old is not None:
+                out[s] = old
+            continue
+        tried += 1
+        new = fetch_one(s)
         time.sleep(sleep)
+        if known_count(new) >= max(known_count(old), 1):
+            p.write_text(json.dumps(new), encoding="utf-8")
+            out[s] = new
+            upgraded += 1
+        elif old is not None:
+            old["attempted"] = date.today().isoformat()  # keep the good data; try again later
+            p.write_text(json.dumps(old), encoding="utf-8")
+            out[s] = old
+            kept += 1
+        # brand-new stock whose download failed: nothing saved, retried next run
+    if tried:
+        log.info("Fundamentals: %d refreshed, %d kept (download had less data), %d tried this run", upgraded, kept, tried)
     return out
 
 

@@ -29,7 +29,7 @@ runs:
       run: |
         git config user.name "3.25-bot"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git add data/state data/universe 2>/dev/null || true
+        git add data/state data/universe data/fundamentals 2>/dev/null || true
         if git diff --cached --quiet; then echo "Nothing new to save"; exit 0; fi
         git commit -q -m "Update encrypted state [skip ci]"
         for i in 1 2 3; do

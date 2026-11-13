@@ -87,3 +87,27 @@ def test_summary_and_rank():
     assert perfect["score"] == 100.0
     weak = ck.ranking_score({"hit_rate": 0.0, "trades": 0, "median_days": None, "p10_mae": -0.2}, 0, "Downtrend", -30, C)
     assert weak["score"] == 0.0
+
+
+def test_fundamentals_never_downgraded_and_capped(tmp_path, monkeypatch):
+    import json
+    from datetime import date, timedelta
+    from nsepattern.data import fundamentals as F
+    monkeypatch.setattr(F, "FUND_DIR", tmp_path)
+    old_day = (date.today() - timedelta(days=60)).isoformat()
+    good = {"symbol": "AAA", "fetched": old_day, "eps": 5, "roe": 12, "profit_margin": 9, "revenue_growth": 4}
+    (tmp_path / "AAA.json").write_text(json.dumps(good))
+    calls = []
+
+    def poor(sym):                      # what Yahoo gives cloud servers: almost nothing
+        calls.append(sym)
+        return {"symbol": sym, "fetched": date.today().isoformat(), "eps": None}
+    monkeypatch.setattr(F, "fetch_one", poor)
+    monkeypatch.setattr(F.time, "sleep", lambda s: None)
+    out = F.get_fundamentals(["AAA", "BBB", "CCC"], max_age_days=30, max_refresh=2)
+    assert out["AAA"]["roe"] == 12                     # good saved data kept
+    assert "BBB" not in out and not (tmp_path / "BBB.json").exists()   # failed new download not saved
+    assert calls == ["AAA", "BBB"]                     # at most 2 refreshes this run
+    calls.clear()
+    F.get_fundamentals(["AAA"], max_age_days=30)
+    assert calls == []                                 # AAA was just tried: not retried for a week

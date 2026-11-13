@@ -42,6 +42,8 @@ fundamentals:
   min_roe_pct: 5              # Return on equity below this = red flag
   max_pledge_pct: 20          # Promoter pledge above this = red flag (also a flag if pledge rose this quarter)
   min_known_metrics: 3        # Fewer known metrics than this = grade UNKNOWN
+  max_age_days: 30            # Fundamentals older than this are refreshed (they change quarterly) ...
+  refresh_per_run: 150        # ... at most this many stocks per run; a refresh with less data never replaces saved data
 
 # ---------- Pattern engine (section 7) ----------
 pattern:
