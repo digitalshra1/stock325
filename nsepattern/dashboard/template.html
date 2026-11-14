@@ -496,7 +496,7 @@ const nameOf = s => D.stocks[s]?.name || X.vcp?.[s]?.name || s;
 
 /* ============================== column definitions (hover) ============================== */
 const TIPS = {
-  "stock":"NSE symbol and its industry. ‘data incomplete’ = fewer than 3 fundamental numbers were available.",
+  "stock":"NSE symbol and its industry.",
   "ltp":"Last traded price and % change vs the previous close. ‘live’ = about 15-minute delayed price (local server, market hours).",
   "status":"READY: close within 0.75% above the buy price, or today’s low touched it. GETTING CLOSE: close within 2.5% above the buy price AND the fall has lasted at least usual days − 1. FORMING: in a fall, not close yet. DEEP: 9%+ below the fall’s start. Uses the best tested level.",
   "days now / usual":"Down days so far in this fall vs this stock’s usual length (middle value of its own deeper past falls).",
@@ -514,7 +514,7 @@ const TIPS = {
   "negative news":"Headlines and NSE announcements in the last 14 days containing negative keywords (fraud, SEBI, probe…).",
   "score":"0–100 ranking: hit rate 35%, risk 15%, mover 15%, trend 15%, confidence 10%, speed 10%.",
   "hit rate (best)":"Best tested level: % of past trades that reached +3.25% within 30 trading days.",
-  "grade":"Fundamentals: GOOD = no red flags, WEAK = any red flag (kept separate), UNKNOWN = too little data.",
+  "fundamental":"Fundamentals grade. GOOD = no red flags. WEAK = any red flag (loss, high debt, falling revenue/earnings, low ROE, high or rising pledge) — kept in its own section. UNKNOWN = fewer than 3 fundamental numbers available.",
   "30d":"Price over the last 30 trading days.",
   "usual days":"Middle value of the length of this stock’s deeper past falls (the deeper half, 3 years).",
   "usual fall":"Middle value of this stock’s own past fall depths, from start price to lowest low.",
@@ -669,13 +669,15 @@ document.addEventListener("click", ev => {
 });
 const starBtn = sym => `<button class="star ${inWL(sym)?"on":""}" data-act="wl" data-sym="${esc(sym)}" title="${inWL(sym)?"Remove from":"Add to"} watchlist" aria-label="Watchlist">${inWL(sym)?"★":"☆"}</button>`;
 const stockLink = (s, sub) => `<a href="#/stock/${encodeURIComponent(s)}"><b>${esc(s)}</b></a><span class="sub">${esc(sub ?? D.stocks[s]?.industry ?? X.vcp?.[s]?.industry ?? "")}</span>`;
+const fundOf = s => D.stocks[s]?.grade?.grade || X.vcp?.[s]?.grade || null;
 const C = {
+  fund: {h:"Fundamental", v:a=>fundOf(a.symbol), f:a=>{ const g=fundOf(a.symbol); return g?pill(g):NA; }},
   vcp: {h:"VCP", num:1, v:a=>X.vcp?.[a.symbol]?.score,
     f:a=>{ const v=X.vcp?.[a.symbol]; if(!v||v.score==null) return '<span class="muted">–</span>';
       return (v.status?`<span class="pill ${pc(v.status)}">${v.status==="VCP BREAKOUT"?"Breakout":"Setup"}</span>`:'<span class="muted">No</span>')+`<span class="sub">${v.score}/8 conditions</span>`; }},
   hits: {h:"", f:a=>D.stocks[a.symbol]?`<button class="sm" data-act="hits" data-sym="${esc(a.symbol)}">View hit rate</button>`:""},
   star: {h:"", f:a=>starBtn(a.symbol)},
-  stock: {h:"Stock", v:a=>a.symbol, f:a=>stockLink(a.symbol) + (a.grade?.grade==="UNKNOWN"?'<span class="sub">⚪ data incomplete</span>':"")},
+  stock: {h:"Stock", v:a=>a.symbol, f:a=>stockLink(a.symbol)},
   ltp: {h:"LTP", num:1, v:a=>Q.get(a.symbol)?.ltp, f:a=>ltpCell(a.symbol)},
   spark: {h:"30d", f:a=>spark(Q.spark(a.symbol))},
 };
@@ -802,7 +804,7 @@ function moodBanner(){
 }
 function candCols(){
   const tgt = CFG.target;
-  return [C.star, C.stock, C.ltp,
+  return [C.star, C.stock, C.fund, C.ltp,
     {h:"Status", v:a=>a.status.status, f:a=>pill(a.status.status_best)+(a.status.status_your!==a.status.status_best?`<span class="sub">your method: ${esc(a.status.status_your||"N/A")}</span>`:"")},
     {h:"Days<br>now / usual", num:1, v:a=>a.status.days_in_streak, f:a=>`${a.status.days_in_streak} / ${num(a.profile.usual_days,0)}`},
     {h:"Fall<br>now / usual", num:1, v:a=>a.status.depth_low_pct, f:a=>`${pct(a.status.depth_low_pct,1)} / ${pct(a.profile.usual_depth_pct,1)}`},
@@ -821,7 +823,7 @@ function candCols(){
   ];
 }
 function formCols(){
-  return [C.star, C.stock, C.ltp,
+  return [C.star, C.stock, C.fund, C.ltp,
     {h:"Days now / usual", num:1, v:a=>a.status.days_in_streak, f:a=>`${a.status.days_in_streak} / ${num(a.profile.usual_days,0)}`},
     {h:"Fall now / usual", num:1, v:a=>a.status.depth_low_pct, f:a=>`${pct(a.status.depth_low_pct,1)} / ${pct(a.profile.usual_depth_pct,1)}`},
     {h:"Buy: your method", num:1, v:a=>a.status.your?.buy_price, f:a=>a.status.your?rs(a.status.your.buy_price):NA},
@@ -829,7 +831,6 @@ function formCols(){
     C.vcp,
     {h:"Close vs buy", num:1, v:a=>a.status.best?.gap_pct, f:a=>a.status.best?pctTxt(a.status.best.gap_pct)+" above":NA},
     {h:"Hit rate (best)", num:1, v:a=>a.backtest.best?.hit_rate, f:a=>hr(a.backtest.best)},
-    {h:"Grade", v:a=>a.grade.grade, f:a=>pill(a.grade.grade)},
     C.hits,
   ];
 }
@@ -878,7 +879,7 @@ function pageHome(q){
   h += `<h2>🟡 Getting close <span class="pill GETTING_CLOSE">${close.length}</span></h2>` + grid(candCols(), close, {empty:"No stock is getting close today."});
   h += `<details><summary>⚪ Forming (${forming.length}): in a down streak, not close yet</summary>${grid(formCols(), forming)}</details>`;
   const exc = stocks().filter(a => isMain(a) && (a.excluded||[]).length && ["READY","GETTING CLOSE"].includes(a.status.status));
-  if(exc.length) h += `<h2>Excluded from buy lists</h2>` + grid([C.star,C.stock,C.ltp,{h:"Status",v:a=>a.status.status,f:a=>pill(a.status.status)},{h:"Reason",v:a=>a.excluded.join(";"),f:a=>`<span class="red">${esc(a.excluded.join("; "))}</span>`}], exc);
+  if(exc.length) h += `<h2>Excluded from buy lists</h2>` + grid([C.star,C.stock,C.fund, C.ltp,{h:"Status",v:a=>a.status.status,f:a=>pill(a.status.status)},{h:"Reason",v:a=>a.excluded.join(";"),f:a=>`<span class="red">${esc(a.excluded.join("; "))}</span>`}], exc);
   h += `<h2>Sector heat</h2>` + grid([
     {h:"Industry", v:r=>r.industry, f:r=>`<a href="#/industry/${encodeURIComponent(r.industry)}"><b>${esc(r.industry)}</b></a>`},
     {h:"Stocks", num:1, v:r=>r.stocks, f:r=>r.stocks},
@@ -891,14 +892,13 @@ function pageHome(q){
 function vcpCols(){
   return [C.star,
     {h:"Stock", v:v=>v.symbol, f:v=>stockLink(v.symbol, v.industry)},
-    C.ltp, C.spark,
+    C.fund, C.ltp, C.spark,
     {h:"Status", v:v=>v.status, f:v=>pill(v.status)+(v.breakout_date?`<span class="sub">${esc(v.breakout_date)}</span>`:"")},
     {h:"Score", num:1, v:v=>v.score, f:v=>`<b>${v.score}</b>/8`},
     {h:"Pivot", num:1, v:v=>v.pivot, f:v=>rs(v.pivot)+`<span class="sub">${pctTxt(v.distance_to_pivot_pct)} away</span>`},
     {h:"Stop (last low)", num:1, v:v=>v.stop, f:v=>rs(v.stop)},
     {h:"Pullbacks", v:v=>(v.contractions||[]).length, f:v=>(v.contractions||[]).map(c=>c.toFixed(1)+"%").join(" → ")||NA},
     {h:"History", num:1, v:v=>v.history?.hit_rate, f:v=>v.history?.signals?`${Math.round(v.history.hit_rate*100)}%<span class="sub">${v.history.hits}/${v.history.signals} hit +${CFG.target}%</span>`:'<span class="muted">no past signals</span>'},
-    {h:"Grade", v:v=>v.grade, f:v=>pill(v.grade)},
     {h:"", f:v=>`<button class="sm" data-act="trade" data-sym="${esc(v.symbol)}">${ico("plus")}Trade</button>`},
   ];
 }
@@ -944,7 +944,7 @@ function pageMovers(q){
   const mx = Math.max(...rows.map(x=>x.day_range_pct), 1);
   h += grid([C.star,
     {h:"Stock", v:x=>x.symbol, f:x=>stockLink(x.symbol)},
-    C.ltp,
+    C.fund, C.ltp,
     {h:"Open", num:1, v:x=>x.open, f:x=>rs(x.open)},
     {h:"Day range", num:1, v:x=>x.day_range_pct, f:x=>`<div class="row" style="justify-content:flex-end;flex-wrap:nowrap"><div class="meter" style="width:70px"><span style="width:${(x.day_range_pct/mx*100).toFixed(0)}%"></span></div><b>${x.day_range_pct.toFixed(1)}%</b></div>`},
     {h:"Usual range", num:1, v:x=>x.usual_range_pct, f:x=>num(x.usual_range_pct,1)+"%"},
@@ -956,7 +956,6 @@ function pageMovers(q){
     {h:"Traded", num:1, v:x=>x.traded_cr, f:x=>x.traded_cr==null?NA:`₹${nf0.format(x.traded_cr)} cr`},
     {h:"Streak status", v:x=>D.stocks[x.symbol]?.status?.status, f:x=>D.stocks[x.symbol]?.status?.status?pill(D.stocks[x.symbol].status.status):'<span class="muted">–</span>'},
     C.vcp,
-    {h:"Grade", v:x=>gradeOf(x.symbol), f:x=>pill(gradeOf(x.symbol))},
     {h:"", f:x=>`<button class="sm" data-act="trade" data-sym="${esc(x.symbol)}">${ico("plus")}Trade</button>`},
     C.hits,
   ], rows, {empty:"No stocks match these filters."});
@@ -965,8 +964,7 @@ function pageMovers(q){
 function pageDeep(){
   const rows = stocks().filter(a => a.status.status==="DEEP" || a.status.deep_recent);
   return `<h1>Deep-fall watchlist${ti(`Stocks at least ${Math.abs(CFG.deep)}% down from the fall's start now, or in the last ${CFG.deep_days} trading days. For study only: no buy alerts.`)}</h1>` + dashTabs() + grid([
-    C.star, C.stock, C.ltp,
-    {h:"Grade", v:a=>a.grade.grade, f:a=>pill(a.grade.grade)},
+    C.star, C.stock, C.fund, C.ltp,
     {h:"Depth", num:1, v:a=>a.status.status==="DEEP"?a.status.depth_low_pct:a.status.deep_recent.depth_low_pct, f:a=>pct(a.status.status==="DEEP"?a.status.depth_low_pct:a.status.deep_recent.depth_low_pct,1)},
     {h:"Days", num:1, v:a=>a.status.status==="DEEP"?a.status.days_in_streak:a.status.deep_recent.days, f:a=>a.status.status==="DEEP"?a.status.days_in_streak:a.status.deep_recent.days},
     {h:"Recovery so far", num:1, v:a=>a.status.deep_recent?.recovery_pct, f:a=>a.status.status==="DEEP"?'<span class="red">still falling</span>':pct(a.status.deep_recent.recovery_pct,1)+`<span class="sub">ended ${esc(a.status.deep_recent.ended)}</span>`},
@@ -977,7 +975,7 @@ function pageDeep(){
 function allCols(){
   return [C.star,
     {h:"Stock", v:a=>a.symbol, f:a=>`<a href="#/stock/${encodeURIComponent(a.symbol)}"><b>${esc(a.symbol)}</b></a><span class="sub">${esc(a.name)}</span>`},
-    C.ltp,
+    C.fund, C.ltp,
     {h:"Status", v:a=>a.status.status||"~", f:a=>a.status.status?pill(a.status.status):'<span class="muted">not in streak</span>'},
     {h:"Usual days", num:1, v:a=>a.profile.usual_days, f:a=>num(a.profile.usual_days,0)},
     {h:"Usual fall", num:1, v:a=>a.profile.usual_depth_pct, f:a=>pct(a.profile.usual_depth_pct,1)},
@@ -986,7 +984,6 @@ function allCols(){
     C.vcp,
     {h:"Mover", num:1, v:a=>a.mover_score, f:a=>num(a.mover_score,0)},
     {h:"Avg range", num:1, v:a=>a.mover.avg_range_pct, f:a=>num(a.mover.avg_range_pct,2)+"%"},
-    {h:"Grade", v:a=>a.grade.grade, f:a=>pill(a.grade.grade)},
     C.hits,
   ];
 }
@@ -999,7 +996,7 @@ function pageWeak(q){
   `<div class="row" style="margin-bottom:10px">Industry: <select onchange="location.hash='#/weak?ind='+encodeURIComponent(this.value)"><option value="">All (${weak.length})</option>${inds.map(i=>`<option ${i===sel?"selected":""}>${esc(i)}</option>`).join("")}</select></div>` +
   grid([C.star,
     {h:"Stock", v:a=>a.symbol, f:a=>stockLink(a.symbol)+`<div class="flagline">${a.grade.red_flags.map(esc).join(" · ")}</div>`},
-    C.ltp, ...allCols().slice(3,9),
+    C.fund, C.ltp, ...allCols().slice(4,10),
     {h:"Buy (best) now", num:1, v:a=>a.status.best?.buy_price, f:a=>a.status.best?rs(a.status.best.buy_price):NA},
     {h:"Checks", num:1, v:a=>a.check_summary?.passed, f:a=>a.check_summary?esc(a.check_summary.line):NA},
     C.hits,
@@ -1163,7 +1160,7 @@ function pageWatchlist(q){
   h += `<h2>Stocks</h2>` + grid([
     {h:"", f:r=>starBtn(r.symbol)},
     {h:"Stock", v:r=>r.symbol, f:r=>stockLink(r.symbol)},
-    C.ltp, C.spark,
+    C.fund, C.ltp, C.spark,
     {h:"Streak status", v:r=>r.a.status?.status, f:r=>r.a.status?.status?pill(r.a.status.status):'<span class="muted">–</span>'},
     {h:"VCP", v:r=>r.v?.status, f:r=>r.v?.status?pill(r.v.status):'<span class="muted">–</span>'},
     {h:"Buy (best tested)", num:1, v:r=>r.a.status?.best?.buy_price, f:r=>r.a.status?.best?rs(r.a.status.best.buy_price):'<span class="muted">–</span>'},
@@ -1173,7 +1170,7 @@ function pageWatchlist(q){
   ], rows, {empty:"Your watchlist is empty. Tap ☆ next to any stock to add it."});
   const act = al.filter(a=>a.active!==false), done = al.filter(a=>a.active===false);
   const acols = [
-    {h:"Stock", v:a=>a.symbol, f:a=>stockLink(a.symbol)}, C.ltp,
+    {h:"Stock", v:a=>a.symbol, f:a=>stockLink(a.symbol)}, C.fund, C.ltp,
     {h:"Condition", v:a=>a.price, f:a=>`${a.kind==="above"?"⬆ Above":"⬇ Below"} <b>${rs(a.price)}</b>`},
     {h:"Distance", num:1, v:a=>{const q=Q.get(a.symbol); return q?(a.price/q.ltp-1)*100:null;}, f:a=>{const q=Q.get(a.symbol); return q?pctTxt((a.price/q.ltp-1)*100):NA;}},
     {h:"Note", f:a=>esc(a.note||"")},
