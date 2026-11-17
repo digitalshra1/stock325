@@ -826,6 +826,7 @@ function candCols(){
   const tgt = CFG.target;
   return [C.star, C.stock, C.fund, C.ltp,
     {h:"Status", v:a=>a.status.status, f:a=>pill(a.status.status_best)+(a.status.status_your!==a.status.status_best?`<span class="sub">your method: ${esc(a.status.status_your||"N/A")}</span>`:"")},
+    C.hit5, C.urange,
     {h:"Score", num:1, v:a=>a.rank?.score, f:a=>a.rank?`<b>${num(a.rank.score,0)}</b>`:NA},
     {h:"Close vs buy", num:1, v:a=>a.status.best?.gap_pct, f:a=>a.status.best ? (a.status.best.zone_touched_today?'<b class="pos">touched today</b>':pctTxt(a.status.best.gap_pct)+" above"+(a.status.best.touched_in_streak?'<span class="sub">touched earlier in this fall</span>':"")) : NA},
     {h:"Days<br>now / usual", num:1, v:a=>a.status.days_in_streak, f:a=>`${a.status.days_in_streak} / ${num(a.profile.usual_days,0)}`},
@@ -833,7 +834,6 @@ function candCols(){
     {h:"Buy: your method", num:1, v:a=>a.status.your?.buy_price, f:a=>a.status.your ? `${rs(a.status.your.buy_price)}<span class="sub">${pctTxt(a.backtest.yours?.level_pct)} · hit ${a.backtest.yours?.hit_rate!=null?Math.round(a.backtest.yours.hit_rate*100)+"%":"N/A"}</span>` : NA},
     {h:"Buy: best tested", num:1, v:a=>a.status.best?.buy_price, f:a=>a.status.best ? `<b>${rs(a.status.best.buy_price)}</b><span class="sub">${pctTxt(a.backtest.best?.level_pct,1)} · hit ${Math.round(a.backtest.best.hit_rate*100)}%</span>` : NA},
     {h:"Target +"+tgt+"%", num:1, v:a=>(a.status.best||a.status.your)?.buy_price, f:a=>{const l=a.status.best||a.status.your; return l?rs(l.buy_price*(1+tgt/100)):NA;}},
-    C.hit5, C.urange,
     {h:"Median<br>days", num:1, v:a=>a.backtest.best?.median_days, f:a=>num(a.backtest.best?.median_days,0)},
     {h:"Conf.", v:a=>a.backtest.best?.trades, f:a=>a.backtest.best?esc(a.backtest.best.confidence):NA},
     {h:"Checks", num:1, v:a=>a.check_summary?.passed, f:a=>a.check_summary?`${a.check_summary.passed}/${a.check_summary.total}<span class="sub">${a.check_summary.warn}⚠ ${a.check_summary.fail}❌ ${a.check_summary.na} N/A</span>`:NA},
@@ -843,14 +843,14 @@ function candCols(){
   ];
 }
 function formCols(){
-  return [C.star, C.stock, C.fund, C.ltp,
+  return [C.star, C.stock, C.fund, C.ltp, C.hit5, C.urange,
     {h:"Close vs buy", num:1, v:a=>a.status.best?.gap_pct, f:a=>a.status.best?pctTxt(a.status.best.gap_pct)+" above":NA},
     {h:"Days now / usual", num:1, v:a=>a.status.days_in_streak, f:a=>`${a.status.days_in_streak} / ${num(a.profile.usual_days,0)}`},
     {h:"Fall now / usual", num:1, v:a=>a.status.depth_low_pct, f:a=>`${pct(a.status.depth_low_pct,1)} / ${pct(a.profile.usual_depth_pct,1)}`},
     {h:"Buy: your method", num:1, v:a=>a.status.your?.buy_price, f:a=>a.status.your?rs(a.status.your.buy_price):NA},
     {h:"Buy: best tested", num:1, v:a=>a.status.best?.buy_price, f:a=>a.status.best?rs(a.status.best.buy_price):NA},
     {h:"Hit rate (best)", num:1, v:a=>a.backtest.best?.hit_rate, f:a=>hr(a.backtest.best)},
-    C.hit5, C.urange, C.bias, C.vcp, C.hits,
+    C.bias, C.vcp, C.hits,
   ];
 }
 function tradeSummary(){ // shared by dashboard + trades
@@ -996,11 +996,11 @@ function allCols(){
     {h:"Stock", v:a=>a.symbol, f:a=>`<a href="#/stock/${encodeURIComponent(a.symbol)}"><b>${esc(a.symbol)}</b></a><span class="sub">${esc(a.name)}</span>`},
     C.fund, C.ltp,
     {h:"Status", v:a=>a.status.status||"~", f:a=>a.status.status?pill(a.status.status):'<span class="muted">not in streak</span>'},
+    C.hit5, C.urange,
     {h:"Usual days", num:1, v:a=>a.profile.usual_days, f:a=>num(a.profile.usual_days,0)},
     {h:"Usual fall", num:1, v:a=>a.profile.usual_depth_pct, f:a=>pct(a.profile.usual_depth_pct,1)},
     {h:"Your method", num:1, v:a=>a.backtest.yours?.level_pct, f:a=>a.backtest.yours?`${pctTxt(a.backtest.yours.level_pct)}<span class="sub">hit ${a.backtest.yours.hit_rate!=null?Math.round(a.backtest.yours.hit_rate*100)+"%":"N/A"}</span>`:NA},
     {h:"Best tested", num:1, v:a=>a.backtest.best?.level_pct, f:a=>a.backtest.best?`${pctTxt(a.backtest.best.level_pct,1)}<span class="sub">hit ${Math.round(a.backtest.best.hit_rate*100)}% · ${esc(a.backtest.best.confidence)}</span>`:NA},
-    C.hit5, C.urange,
     {h:"Mover", num:1, v:a=>a.mover_score, f:a=>num(a.mover_score,0)},
     {h:"Avg range", num:1, v:a=>a.mover.avg_range_pct, f:a=>num(a.mover.avg_range_pct,2)+"%"},
     C.bias, C.vcp, C.hits,
