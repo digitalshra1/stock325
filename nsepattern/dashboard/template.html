@@ -826,20 +826,23 @@ function candCols(){
   const tgt = CFG.target;
   return [C.star, C.stock, C.fund, C.ltp,
     {h:"Status", v:a=>a.status.status, f:a=>pill(a.status.status_best)+(a.status.status_your!==a.status.status_best?`<span class="sub">your method: ${esc(a.status.status_your||"N/A")}</span>`:"")},
-    C.hit5, C.urange,
-    {h:"Score", num:1, v:a=>a.rank?.score, f:a=>a.rank?`<b>${num(a.rank.score,0)}</b>`:NA},
-    {h:"Close vs buy", num:1, v:a=>a.status.best?.gap_pct, f:a=>a.status.best ? (a.status.best.zone_touched_today?'<b class="pos">touched today</b>':pctTxt(a.status.best.gap_pct)+" above"+(a.status.best.touched_in_streak?'<span class="sub">touched earlier in this fall</span>':"")) : NA},
+    C.bias,
+    C.hit5,
+    C.urange,
     {h:"Days<br>now / usual", num:1, v:a=>a.status.days_in_streak, f:a=>`${a.status.days_in_streak} / ${num(a.profile.usual_days,0)}`},
     {h:"Fall<br>now / usual", num:1, v:a=>a.status.depth_low_pct, f:a=>`${pct(a.status.depth_low_pct,1)} / ${pct(a.profile.usual_depth_pct,1)}`},
+    {h:"Score", num:1, v:a=>a.rank?.score, f:a=>a.rank?`<b>${num(a.rank.score,0)}</b>`:NA},
     {h:"Buy: your method", num:1, v:a=>a.status.your?.buy_price, f:a=>a.status.your ? `${rs(a.status.your.buy_price)}<span class="sub">${pctTxt(a.backtest.yours?.level_pct)} · hit ${a.backtest.yours?.hit_rate!=null?Math.round(a.backtest.yours.hit_rate*100)+"%":"N/A"}</span>` : NA},
     {h:"Buy: best tested", num:1, v:a=>a.status.best?.buy_price, f:a=>a.status.best ? `<b>${rs(a.status.best.buy_price)}</b><span class="sub">${pctTxt(a.backtest.best?.level_pct,1)} · hit ${Math.round(a.backtest.best.hit_rate*100)}%</span>` : NA},
     {h:"Target +"+tgt+"%", num:1, v:a=>(a.status.best||a.status.your)?.buy_price, f:a=>{const l=a.status.best||a.status.your; return l?rs(l.buy_price*(1+tgt/100)):NA;}},
     {h:"Median<br>days", num:1, v:a=>a.backtest.best?.median_days, f:a=>num(a.backtest.best?.median_days,0)},
+    C.vcp,
+    {h:"Close vs buy", num:1, v:a=>a.status.best?.gap_pct, f:a=>a.status.best ? (a.status.best.zone_touched_today?'<b class="pos">touched today</b>':pctTxt(a.status.best.gap_pct)+" above"+(a.status.best.touched_in_streak?'<span class="sub">touched earlier in this fall</span>':"")) : NA},
     {h:"Conf.", v:a=>a.backtest.best?.trades, f:a=>a.backtest.best?esc(a.backtest.best.confidence):NA},
     {h:"Checks", num:1, v:a=>a.check_summary?.passed, f:a=>a.check_summary?`${a.check_summary.passed}/${a.check_summary.total}<span class="sub">${a.check_summary.warn}⚠ ${a.check_summary.fail}❌ ${a.check_summary.na} N/A</span>`:NA},
     {h:"News", v:a=>(a.news?.negative||[]).length, f:a=>(a.news?.negative||[]).length?`<span class="red">📰 ${a.news.negative.length}</span>`:(a.news?'<span class="muted">clean</span>':NA)},
-    C.bias, C.vcp, C.hits,
     {h:"", f:a=>`<button class="sm" data-act="trade" data-sym="${esc(a.symbol)}" title="Create trade">${ico("plus")}Trade</button>`},
+    C.hits,
   ];
 }
 function formCols(){
