@@ -588,6 +588,7 @@ const TIPS = {
   "open":"Today's opening price.",
   "day range":"(High − Low) ÷ Open of the last session: how much the stock swung in a single day.",
   "usual range":"Its average day range, (High − Low) ÷ Open, over the previous 60 sessions.",
+  "hit in 5 days":"% of past trades at the best tested level that reached +3.25% within 5 trading days of buying. In 3 years of history, 70%+ here together with a Usual range of 4%+ hit within 5 days 72% of the time (all trades: 64%).",
   "bias":"Intraday bias over the last 60 days, from the ± sheet: average % of days the price rose 1–2% above the open minus the % of days it fell 1–2% below it. Selling = −15 or lower, Buying = +15 or higher, otherwise Balanced. For your understanding only: in 3 years of past trades it did not change the +3.25% hit rate (89.8% strong selling vs 87.9% buying); selling-bias stocks dipped about 0.6% deeper before the target.",
   "× usual":"Day range ÷ usual range. 2× or more = an unusual move for this stock.",
   "high – low":"The day's high and low prices.",
@@ -681,6 +682,7 @@ const biasHtml = b => b==null ? NA : `<span class="pill ${b<=-15?"bias-s":b>=15?
 const usualRange = a => X.quotes?.[a.symbol]?.usual_range_pct ?? a.mover?.avg_range_pct;
 const C = {
   bias: {h:"Bias", num:1, v:a=>biasOf(a.mover), f:a=>biasHtml(biasOf(a.mover))},
+  hit5: {h:"Hit in 5 days", num:1, v:a=>a.backtest?.best?.hit_by_days?.["5"], f:a=>{ const v=a.backtest?.best?.hit_by_days?.["5"]; return v==null?NA:`<b>${Math.round(v*100)}%</b><span class="sub">best tested</span>`; }},
   urange: {h:"Usual range", num:1, v:a=>usualRange(a), f:a=>{ const u=usualRange(a); return u==null?NA:num(u,1)+"%"; }},
   fund: {h:"Fundamental", v:a=>fundOf(a.symbol), f:a=>{ const g=fundOf(a.symbol); return g?pill(g):NA; }},
   vcp: {h:"VCP", num:1, v:a=>X.vcp?.[a.symbol]?.score,
@@ -817,7 +819,7 @@ function candCols(){
   const tgt = CFG.target;
   return [C.star, C.stock, C.fund, C.ltp,
     {h:"Status", v:a=>a.status.status, f:a=>pill(a.status.status_best)+(a.status.status_your!==a.status.status_best?`<span class="sub">your method: ${esc(a.status.status_your||"N/A")}</span>`:"")},
-    C.bias, C.urange,
+    C.bias, C.urange, C.hit5,
     {h:"Days<br>now / usual", num:1, v:a=>a.status.days_in_streak, f:a=>`${a.status.days_in_streak} / ${num(a.profile.usual_days,0)}`},
     {h:"Fall<br>now / usual", num:1, v:a=>a.status.depth_low_pct, f:a=>`${pct(a.status.depth_low_pct,1)} / ${pct(a.profile.usual_depth_pct,1)}`},
     {h:"Buy: your method", num:1, v:a=>a.status.your?.buy_price, f:a=>a.status.your ? `${rs(a.status.your.buy_price)}<span class="sub">${pctTxt(a.backtest.yours?.level_pct)} · hit ${a.backtest.yours?.hit_rate!=null?Math.round(a.backtest.yours.hit_rate*100)+"%":"N/A"}</span>` : NA},
@@ -989,7 +991,7 @@ function allCols(){
     {h:"Stock", v:a=>a.symbol, f:a=>`<a href="#/stock/${encodeURIComponent(a.symbol)}"><b>${esc(a.symbol)}</b></a><span class="sub">${esc(a.name)}</span>`},
     C.fund, C.ltp,
     {h:"Status", v:a=>a.status.status||"~", f:a=>a.status.status?pill(a.status.status):'<span class="muted">not in streak</span>'},
-    C.bias, C.urange,
+    C.bias, C.urange, C.hit5,
     {h:"Usual days", num:1, v:a=>a.profile.usual_days, f:a=>num(a.profile.usual_days,0)},
     {h:"Usual fall", num:1, v:a=>a.profile.usual_depth_pct, f:a=>pct(a.profile.usual_depth_pct,1)},
     {h:"Your method", num:1, v:a=>a.backtest.yours?.level_pct, f:a=>a.backtest.yours?`${pctTxt(a.backtest.yours.level_pct)}<span class="sub">hit ${a.backtest.yours.hit_rate!=null?Math.round(a.backtest.yours.hit_rate*100)+"%":"N/A"}</span>`:NA},
@@ -1009,7 +1011,7 @@ function pageWeak(q){
   `<div class="row" style="margin-bottom:10px">Industry: <select onchange="location.hash='#/weak?ind='+encodeURIComponent(this.value)"><option value="">All (${weak.length})</option>${inds.map(i=>`<option ${i===sel?"selected":""}>${esc(i)}</option>`).join("")}</select></div>` +
   grid([C.star,
     {h:"Stock", v:a=>a.symbol, f:a=>stockLink(a.symbol)+`<div class="flagline">${a.grade.red_flags.map(esc).join(" · ")}</div>`},
-    C.fund, C.ltp, ...allCols().slice(4,12),
+    C.fund, C.ltp, ...allCols().slice(4,13),
     {h:"Buy (best) now", num:1, v:a=>a.status.best?.buy_price, f:a=>a.status.best?rs(a.status.best.buy_price):NA},
     {h:"Checks", num:1, v:a=>a.check_summary?.passed, f:a=>a.check_summary?esc(a.check_summary.line):NA},
     C.hits,
