@@ -160,6 +160,7 @@ th:hover{color:var(--ink)} th.asc::after{content:" ▲";font-size:9px} th.desc::
 tbody tr{transition:background .12s} tbody tr:hover td{background:color-mix(in srgb,var(--accent) 5%,transparent)}
 tr:last-child td{border-bottom:none}
 .virt tbody tr{height:58px} .virt td{overflow:hidden}
+tr.ideal td{background:color-mix(in srgb,var(--gold) 16%,transparent)} tr.ideal td:first-child{box-shadow:inset 4px 0 0 var(--gold)}
 tr.hl td{background:var(--green-bg)} tr.hl2 td{background:color-mix(in srgb,var(--blue) 12%,transparent)}
 td.num,th.num{text-align:right}
 .sub{display:block;color:var(--muted);font-size:11px;font-weight:500}
@@ -189,6 +190,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid color-mix(in srgb,var(
 .tl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;font-size:13px} .kv>div:nth-child(odd){color:var(--muted)}
 .pill.bias-s{background:var(--red-bg);color:var(--red)} .pill.bias-b{background:var(--green-bg);color:var(--green)} .pill.bias-n{background:var(--grey-bg);color:var(--muted)}
+.idealkey{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;background:color-mix(in srgb,var(--gold) 30%,transparent);box-shadow:inset 3px 0 0 var(--gold)}
 .checks{padding:0;margin:0;list-style:none} .checks li{margin:6px 0}
 .chart svg{width:100%;height:auto;display:block}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
@@ -616,6 +618,11 @@ const headText = h => String(h).replace(/<br\s*\/?>/g," ").replace(/<[^>]+>/g," 
 const GRIDS = {}; let GID = 0;
 
 const ROWH = 58;
+// "Ideal" = READY + Hit in 5 days >= 70% + Usual range >= 4% (history: 72% hit +3.25% within 5 days vs 64% overall).
+// Display only: it does not change status, score, checks or alerts.
+const IDEAL = {hit5: 0.70, range: 4.0};
+const isIdeal = r => { const a = r && r.symbol && D.stocks[r.symbol]; if(!a || r!==a || a.status?.status!=="READY") return false;
+  const h = a.backtest?.best?.hit_by_days?.["5"], u = usualRange(a); return h!=null && u!=null && h>=IDEAL.hit5 && u>=IDEAL.range; };
 function grid(cols, rows, opt={}){
   if(!rows.length) return `<div class="card empty">${opt.empty||"Nothing here right now."}</div>`;
   const id = "g"+(GID++), virt = rows.length > 400;
@@ -625,7 +632,7 @@ function grid(cols, rows, opt={}){
 }
 function bodyRows(id, from, to){
   const g = GRIDS[id];
-  return g.rows.slice(from,to).map(r => `<tr class="${g.opt.rowCls?g.opt.rowCls(r):""}">` + g.cols.map(c => `<td class="${c.num?"num":""}">${c.f(r)}</td>`).join("") + "</tr>").join("");
+  return g.rows.slice(from,to).map(r => `<tr class="${g.opt.rowCls?g.opt.rowCls(r):""}${isIdeal(r)?" ideal":""}"${isIdeal(r)?' title="Ideal: READY, Hit in 5 days 70%+, Usual range 4%+"':""}>` + g.cols.map(c => `<td class="${c.num?"num":""}">${c.f(r)}</td>`).join("") + "</tr>").join("");
 }
 function paintVirtual(id){
   const g = GRIDS[id], w = $("#w"+id), b = $("#b"+id); if(!w||!b) return;
@@ -819,33 +826,31 @@ function candCols(){
   const tgt = CFG.target;
   return [C.star, C.stock, C.fund, C.ltp,
     {h:"Status", v:a=>a.status.status, f:a=>pill(a.status.status_best)+(a.status.status_your!==a.status.status_best?`<span class="sub">your method: ${esc(a.status.status_your||"N/A")}</span>`:"")},
-    C.bias, C.urange, C.hit5,
+    {h:"Score", num:1, v:a=>a.rank?.score, f:a=>a.rank?`<b>${num(a.rank.score,0)}</b>`:NA},
+    {h:"Close vs buy", num:1, v:a=>a.status.best?.gap_pct, f:a=>a.status.best ? (a.status.best.zone_touched_today?'<b class="pos">touched today</b>':pctTxt(a.status.best.gap_pct)+" above"+(a.status.best.touched_in_streak?'<span class="sub">touched earlier in this fall</span>':"")) : NA},
     {h:"Days<br>now / usual", num:1, v:a=>a.status.days_in_streak, f:a=>`${a.status.days_in_streak} / ${num(a.profile.usual_days,0)}`},
     {h:"Fall<br>now / usual", num:1, v:a=>a.status.depth_low_pct, f:a=>`${pct(a.status.depth_low_pct,1)} / ${pct(a.profile.usual_depth_pct,1)}`},
     {h:"Buy: your method", num:1, v:a=>a.status.your?.buy_price, f:a=>a.status.your ? `${rs(a.status.your.buy_price)}<span class="sub">${pctTxt(a.backtest.yours?.level_pct)} · hit ${a.backtest.yours?.hit_rate!=null?Math.round(a.backtest.yours.hit_rate*100)+"%":"N/A"}</span>` : NA},
     {h:"Buy: best tested", num:1, v:a=>a.status.best?.buy_price, f:a=>a.status.best ? `<b>${rs(a.status.best.buy_price)}</b><span class="sub">${pctTxt(a.backtest.best?.level_pct,1)} · hit ${Math.round(a.backtest.best.hit_rate*100)}%</span>` : NA},
-    C.vcp,
-    {h:"Close vs buy", num:1, v:a=>a.status.best?.gap_pct, f:a=>a.status.best ? (a.status.best.zone_touched_today?'<b class="pos">touched today</b>':pctTxt(a.status.best.gap_pct)+" above"+(a.status.best.touched_in_streak?'<span class="sub">touched earlier in this fall</span>':"")) : NA},
     {h:"Target +"+tgt+"%", num:1, v:a=>(a.status.best||a.status.your)?.buy_price, f:a=>{const l=a.status.best||a.status.your; return l?rs(l.buy_price*(1+tgt/100)):NA;}},
+    C.hit5, C.urange,
     {h:"Median<br>days", num:1, v:a=>a.backtest.best?.median_days, f:a=>num(a.backtest.best?.median_days,0)},
     {h:"Conf.", v:a=>a.backtest.best?.trades, f:a=>a.backtest.best?esc(a.backtest.best.confidence):NA},
     {h:"Checks", num:1, v:a=>a.check_summary?.passed, f:a=>a.check_summary?`${a.check_summary.passed}/${a.check_summary.total}<span class="sub">${a.check_summary.warn}⚠ ${a.check_summary.fail}❌ ${a.check_summary.na} N/A</span>`:NA},
     {h:"News", v:a=>(a.news?.negative||[]).length, f:a=>(a.news?.negative||[]).length?`<span class="red">📰 ${a.news.negative.length}</span>`:(a.news?'<span class="muted">clean</span>':NA)},
-    {h:"Score", num:1, v:a=>a.rank?.score, f:a=>a.rank?`<b>${num(a.rank.score,0)}</b>`:NA},
+    C.bias, C.vcp, C.hits,
     {h:"", f:a=>`<button class="sm" data-act="trade" data-sym="${esc(a.symbol)}" title="Create trade">${ico("plus")}Trade</button>`},
-    C.hits,
   ];
 }
 function formCols(){
   return [C.star, C.stock, C.fund, C.ltp,
+    {h:"Close vs buy", num:1, v:a=>a.status.best?.gap_pct, f:a=>a.status.best?pctTxt(a.status.best.gap_pct)+" above":NA},
     {h:"Days now / usual", num:1, v:a=>a.status.days_in_streak, f:a=>`${a.status.days_in_streak} / ${num(a.profile.usual_days,0)}`},
     {h:"Fall now / usual", num:1, v:a=>a.status.depth_low_pct, f:a=>`${pct(a.status.depth_low_pct,1)} / ${pct(a.profile.usual_depth_pct,1)}`},
     {h:"Buy: your method", num:1, v:a=>a.status.your?.buy_price, f:a=>a.status.your?rs(a.status.your.buy_price):NA},
     {h:"Buy: best tested", num:1, v:a=>a.status.best?.buy_price, f:a=>a.status.best?rs(a.status.best.buy_price):NA},
-    C.vcp,
-    {h:"Close vs buy", num:1, v:a=>a.status.best?.gap_pct, f:a=>a.status.best?pctTxt(a.status.best.gap_pct)+" above":NA},
     {h:"Hit rate (best)", num:1, v:a=>a.backtest.best?.hit_rate, f:a=>hr(a.backtest.best)},
-    C.hits,
+    C.hit5, C.urange, C.bias, C.vcp, C.hits,
   ];
 }
 function tradeSummary(){ // shared by dashboard + trades
@@ -884,12 +889,12 @@ function pageHome(q){
   if(show==="ready" || show==="close"){
     const lbl = show==="ready" ? "Ready to buy" : "Getting close";
     h += chip(`${lbl} (${(show==="ready"?ready:close).length})`, "#/");
-    h += `<h2>${show==="ready"?"🟢 Ready to buy":"🟡 Getting close"}</h2>` + grid(candCols(), show==="ready"?ready:close, {empty:"No stocks right now."});
+    h += `<h2>${show==="ready"?"🟢 Ready to buy":"🟡 Getting close"}</h2>` + (show==="ready"&&ready.some(isIdeal)?'<p class="small muted" style="margin:-4px 0 8px"><span class="idealkey"></span> Highlighted = ideal: READY, Hit in 5 days 70%+ and Usual range 4%+ (historically fastest to +3.25%; expect about a 6% dip on the way).</p>':"") + grid(candCols(), show==="ready"?ready:close, {empty:"No stocks right now."});
     return h;
   }
   if(D.mood?.mood==="STRESSED") h += `<div class="banner unlocked" style="margin-top:14px">Market stressed: buy signals are paused. The lists below are for reference only.</div>`;
   if(D.mood?.mood==="CAUTION") h += `<div class="banner demo" style="margin-top:14px">⚠ Caution market: check each candidate carefully.</div>`;
-  h += `<h2>🟢 Ready to buy <span class="pill READY">${ready.length}</span></h2>` + grid(candCols(), ready, {empty:"No stock is in the buy zone today."});
+  h += `<h2>🟢 Ready to buy <span class="pill READY">${ready.length}</span></h2>` + (ready.some(isIdeal)?'<p class="small muted" style="margin:-4px 0 8px"><span class="idealkey"></span> Highlighted = ideal: READY, Hit in 5 days 70%+ and Usual range 4%+ (historically fastest to +3.25%; expect about a 6% dip on the way).</p>':"") + grid(candCols(), ready, {empty:"No stock is in the buy zone today."});
   h += `<h2>🟡 Getting close <span class="pill GETTING_CLOSE">${close.length}</span></h2>` + grid(candCols(), close, {empty:"No stock is getting close today."});
   h += `<details><summary>⚪ Forming (${forming.length}): in a down streak, not close yet</summary>${grid(formCols(), forming)}</details>`;
   const exc = stocks().filter(a => isMain(a) && (a.excluded||[]).length && ["READY","GETTING CLOSE"].includes(a.status.status));
@@ -991,15 +996,14 @@ function allCols(){
     {h:"Stock", v:a=>a.symbol, f:a=>`<a href="#/stock/${encodeURIComponent(a.symbol)}"><b>${esc(a.symbol)}</b></a><span class="sub">${esc(a.name)}</span>`},
     C.fund, C.ltp,
     {h:"Status", v:a=>a.status.status||"~", f:a=>a.status.status?pill(a.status.status):'<span class="muted">not in streak</span>'},
-    C.bias, C.urange, C.hit5,
     {h:"Usual days", num:1, v:a=>a.profile.usual_days, f:a=>num(a.profile.usual_days,0)},
     {h:"Usual fall", num:1, v:a=>a.profile.usual_depth_pct, f:a=>pct(a.profile.usual_depth_pct,1)},
     {h:"Your method", num:1, v:a=>a.backtest.yours?.level_pct, f:a=>a.backtest.yours?`${pctTxt(a.backtest.yours.level_pct)}<span class="sub">hit ${a.backtest.yours.hit_rate!=null?Math.round(a.backtest.yours.hit_rate*100)+"%":"N/A"}</span>`:NA},
     {h:"Best tested", num:1, v:a=>a.backtest.best?.level_pct, f:a=>a.backtest.best?`${pctTxt(a.backtest.best.level_pct,1)}<span class="sub">hit ${Math.round(a.backtest.best.hit_rate*100)}% · ${esc(a.backtest.best.confidence)}</span>`:NA},
-    C.vcp,
+    C.hit5, C.urange,
     {h:"Mover", num:1, v:a=>a.mover_score, f:a=>num(a.mover_score,0)},
     {h:"Avg range", num:1, v:a=>a.mover.avg_range_pct, f:a=>num(a.mover.avg_range_pct,2)+"%"},
-    C.hits,
+    C.bias, C.vcp, C.hits,
   ];
 }
 function pageWeak(q){
@@ -1011,7 +1015,7 @@ function pageWeak(q){
   `<div class="row" style="margin-bottom:10px">Industry: <select onchange="location.hash='#/weak?ind='+encodeURIComponent(this.value)"><option value="">All (${weak.length})</option>${inds.map(i=>`<option ${i===sel?"selected":""}>${esc(i)}</option>`).join("")}</select></div>` +
   grid([C.star,
     {h:"Stock", v:a=>a.symbol, f:a=>stockLink(a.symbol)+`<div class="flagline">${a.grade.red_flags.map(esc).join(" · ")}</div>`},
-    C.fund, C.ltp, ...allCols().slice(4,13),
+    C.fund, C.ltp, ...allCols().slice(4,15),
     {h:"Buy (best) now", num:1, v:a=>a.status.best?.buy_price, f:a=>a.status.best?rs(a.status.best.buy_price):NA},
     {h:"Checks", num:1, v:a=>a.check_summary?.passed, f:a=>a.check_summary?esc(a.check_summary.line):NA},
     C.hits,
