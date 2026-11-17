@@ -188,6 +188,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid color-mix(in srgb,var(
 .track .en{position:absolute;top:-3px;width:2px;height:14px;background:var(--muted)}
 .tl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;font-size:13px} .kv>div:nth-child(odd){color:var(--muted)}
+.pill.bias-s{background:var(--red-bg);color:var(--red)} .pill.bias-b{background:var(--green-bg);color:var(--green)} .pill.bias-n{background:var(--grey-bg);color:var(--muted)}
 .checks{padding:0;margin:0;list-style:none} .checks li{margin:6px 0}
 .chart svg{width:100%;height:auto;display:block}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
@@ -586,7 +587,8 @@ const TIPS = {
   "pullbacks":"Size of each pullback, oldest to newest. Shrinking is what a VCP needs.",
   "open":"Today's opening price.",
   "day range":"(High − Low) ÷ Open of the last session: how much the stock swung in a single day.",
-  "usual range":"Its average day range over the previous 60 sessions.",
+  "usual range":"Its average day range, (High − Low) ÷ Open, over the previous 60 sessions.",
+  "bias":"Intraday bias over the last 60 days, from the ± sheet: average % of days the price rose 1–2% above the open minus the % of days it fell 1–2% below it. Selling = −15 or lower, Buying = +15 or higher, otherwise Balanced. For your understanding only: in 3 years of past trades it did not change the +3.25% hit rate (89.8% strong selling vs 87.9% buying); selling-bias stocks dipped about 0.6% deeper before the target.",
   "× usual":"Day range ÷ usual range. 2× or more = an unusual move for this stock.",
   "high – low":"The day's high and low prices.",
   "change":"Close vs the previous close.",
@@ -670,7 +672,16 @@ document.addEventListener("click", ev => {
 const starBtn = sym => `<button class="star ${inWL(sym)?"on":""}" data-act="wl" data-sym="${esc(sym)}" title="${inWL(sym)?"Remove from":"Add to"} watchlist" aria-label="Watchlist">${inWL(sym)?"★":"☆"}</button>`;
 const stockLink = (s, sub) => `<a href="#/stock/${encodeURIComponent(s)}"><b>${esc(s)}</b></a><span class="sub">${esc(sub ?? D.stocks[s]?.industry ?? X.vcp?.[s]?.industry ?? "")}</span>`;
 const fundOf = s => D.stocks[s]?.grade?.grade || X.vcp?.[s]?.grade || null;
+// Intraday bias from the ± sheet: avg % of days each + level was reached minus each − level (same levels on both sides).
+// Display only: it does not change status, checks, score or alerts.
+const biasOf = mv => { const dn = mv?.down_hits||{}, up = mv?.up_hits||{}, ks = Object.keys(dn).filter(k => up[k]!=null);
+  return ks.length ? ks.reduce((s,k)=>s+up[k]-dn[k],0)/ks.length : null; };
+const biasLab = b => b==null ? null : b<=-15 ? "Selling" : b>=15 ? "Buying" : "Balanced";
+const biasHtml = b => b==null ? NA : `<span class="pill ${b<=-15?"bias-s":b>=15?"bias-b":"bias-n"}">${biasLab(b)}</span><span class="sub">${b>0?"+":""}${b.toFixed(0)} pts</span>`;
+const usualRange = a => X.quotes?.[a.symbol]?.usual_range_pct ?? a.mover?.avg_range_pct;
 const C = {
+  bias: {h:"Bias", num:1, v:a=>biasOf(a.mover), f:a=>biasHtml(biasOf(a.mover))},
+  urange: {h:"Usual range", num:1, v:a=>usualRange(a), f:a=>{ const u=usualRange(a); return u==null?NA:num(u,1)+"%"; }},
   fund: {h:"Fundamental", v:a=>fundOf(a.symbol), f:a=>{ const g=fundOf(a.symbol); return g?pill(g):NA; }},
   vcp: {h:"VCP", num:1, v:a=>X.vcp?.[a.symbol]?.score,
     f:a=>{ const v=X.vcp?.[a.symbol]; if(!v||v.score==null) return '<span class="muted">–</span>';
@@ -806,6 +817,7 @@ function candCols(){
   const tgt = CFG.target;
   return [C.star, C.stock, C.fund, C.ltp,
     {h:"Status", v:a=>a.status.status, f:a=>pill(a.status.status_best)+(a.status.status_your!==a.status.status_best?`<span class="sub">your method: ${esc(a.status.status_your||"N/A")}</span>`:"")},
+    C.bias, C.urange,
     {h:"Days<br>now / usual", num:1, v:a=>a.status.days_in_streak, f:a=>`${a.status.days_in_streak} / ${num(a.profile.usual_days,0)}`},
     {h:"Fall<br>now / usual", num:1, v:a=>a.status.depth_low_pct, f:a=>`${pct(a.status.depth_low_pct,1)} / ${pct(a.profile.usual_depth_pct,1)}`},
     {h:"Buy: your method", num:1, v:a=>a.status.your?.buy_price, f:a=>a.status.your ? `${rs(a.status.your.buy_price)}<span class="sub">${pctTxt(a.backtest.yours?.level_pct)} · hit ${a.backtest.yours?.hit_rate!=null?Math.round(a.backtest.yours.hit_rate*100)+"%":"N/A"}</span>` : NA},
@@ -977,6 +989,7 @@ function allCols(){
     {h:"Stock", v:a=>a.symbol, f:a=>`<a href="#/stock/${encodeURIComponent(a.symbol)}"><b>${esc(a.symbol)}</b></a><span class="sub">${esc(a.name)}</span>`},
     C.fund, C.ltp,
     {h:"Status", v:a=>a.status.status||"~", f:a=>a.status.status?pill(a.status.status):'<span class="muted">not in streak</span>'},
+    C.bias, C.urange,
     {h:"Usual days", num:1, v:a=>a.profile.usual_days, f:a=>num(a.profile.usual_days,0)},
     {h:"Usual fall", num:1, v:a=>a.profile.usual_depth_pct, f:a=>pct(a.profile.usual_depth_pct,1)},
     {h:"Your method", num:1, v:a=>a.backtest.yours?.level_pct, f:a=>a.backtest.yours?`${pctTxt(a.backtest.yours.level_pct)}<span class="sub">hit ${a.backtest.yours.hit_rate!=null?Math.round(a.backtest.yours.hit_rate*100)+"%":"N/A"}</span>`:NA},
@@ -996,7 +1009,7 @@ function pageWeak(q){
   `<div class="row" style="margin-bottom:10px">Industry: <select onchange="location.hash='#/weak?ind='+encodeURIComponent(this.value)"><option value="">All (${weak.length})</option>${inds.map(i=>`<option ${i===sel?"selected":""}>${esc(i)}</option>`).join("")}</select></div>` +
   grid([C.star,
     {h:"Stock", v:a=>a.symbol, f:a=>stockLink(a.symbol)+`<div class="flagline">${a.grade.red_flags.map(esc).join(" · ")}</div>`},
-    C.fund, C.ltp, ...allCols().slice(4,10),
+    C.fund, C.ltp, ...allCols().slice(4,12),
     {h:"Buy (best) now", num:1, v:a=>a.status.best?.buy_price, f:a=>a.status.best?rs(a.status.best.buy_price):NA},
     {h:"Checks", num:1, v:a=>a.check_summary?.passed, f:a=>a.check_summary?esc(a.check_summary.line):NA},
     C.hits,
@@ -1472,7 +1485,7 @@ function pageStock(sym){
     {h:"Result", num:1, v:t=>t.result, f:t=>pct(t.result*100)}, {h:"Mood", v:t=>t.mood, f:t=>esc(t.mood)}, {h:"Trend", v:t=>t.trend, f:t=>esc(t.trend)},
   ], [...(bt.best_trades||[])].reverse(), {empty:"No trades at the best tested level."});
   const mv=a.mover;
-  h += `<h2>Daily mover (your old sheet)${ti("Share of days the level was reached from the open, over the last "+mv.days+" days.")}</h2><p class="small muted" style="margin-top:-6px">Average daily range ${num(mv.avg_range_pct,2)}% · mover score ${num(a.mover_score,0)}/100</p>`;
+  h += `<h2>Daily mover (your old sheet)${ti("Share of days the level was reached from the open, over the last "+mv.days+" days.")}</h2><p class="small muted" style="margin-top:-6px">Average daily range ${num(mv.avg_range_pct,2)}% · mover score ${num(a.mover_score,0)}/100 · bias ${biasHtml(biasOf(mv)).replace('<span class="sub">',' <span class="muted">')}${ti(TIPS.bias)}</p>`;
   h += `<div class="tw"><table><thead><tr>${Object.keys(mv.down_hits).map(k=>`<th class="num">-${k}%</th>`).join("")}${Object.keys(mv.up_hits).map(k=>`<th class="num">+${k}%</th>`).join("")}</tr></thead><tbody><tr>${Object.values(mv.down_hits).map(v=>`<td class="num">${v.toFixed(0)}%</td>`).join("")}${Object.values(mv.up_hits).map(v=>`<td class="num">${v.toFixed(0)}%</td>`).join("")}</tr></tbody></table></div>`;
   if(a.sheet?.length){
     const lv = Object.keys(a.sheet[0]).filter(k=>/^[+-]\d/.test(k));
