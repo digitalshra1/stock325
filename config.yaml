@@ -124,7 +124,9 @@ alerts:
 
 # ---------- Research (display only: never changes status, score, checks or alerts) ----------
 research:
-  recent_days: 120            # "Ready history" tab: buy-level touches in about the last this many trading days
+  live_since: "2026-11-11"    # "Ready history" tab counts READY stocks from this day (the first live scan)
+  live_log_file: data/state/readylog.enc.json   # encrypted journal of READY stocks, saved by each scan
+  max_rebuild_days: 15        # a missed scan's sessions are rebuilt by the next scan (at most this many)
 
 # =====================================================================
 #  ADD-ON MODULES (new layer; the settings above are unchanged)

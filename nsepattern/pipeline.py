@@ -25,6 +25,7 @@ from nsepattern.engine.mood import MOOD_TICKERS, compute_mood_history, reasons_f
 from nsepattern.engine.mover import liquidity_crore, mover_scores, mover_stats, sheet_table
 from nsepattern.engine.profile import analyse_stock
 from nsepattern.engine import research
+from nsepattern import livelog
 
 log = logging.getLogger("nsepattern.pipeline")
 CANDIDATE = ("READY", "GETTING CLOSE")
@@ -132,10 +133,7 @@ def run_full(cfg: dict, weekly: bool = False, limit: int | None = None) -> dict:
     shp_done = 0
     nifty_c = mood_closes.get("nifty")
     nifty5 = None if nifty_c is None else (nifty_c / nifty_c.shift(5) - 1) * 100
-    rcfg = cfg.get("research", {})
-    recent_days = int(rcfg.get("recent_days", 120))
     research_rows: list[dict] = []
-    ready_history: list[dict] = []
     for i, s in enumerate(movers, 1):
         a = analyse_stock(prices[s], cfg, mood_series)
         age = nse.shareholding_age(s)
@@ -161,11 +159,10 @@ def run_full(cfg: dict, weekly: bool = False, limit: int | None = None) -> dict:
         })
         # research layer: display only (loser study, exit test, ready history, today's warning signs)
         try:
-            rr = research.stock_research(prices[s], a, cfg, nifty5, mood_series, recent_days)
+            rr = research.stock_research(prices[s], a, cfg, nifty5)
             a["risk_today"] = rr["today"]
             if g["grade"] != "WEAK":
                 research_rows.extend(rr["hist"])
-                ready_history.extend({"symbol": s, **x} for x in rr["recent"])
         except Exception as e:  # never let research break the scan
             log.warning("research %s: %s", s, e)
         stocks[s] = a
@@ -205,6 +202,15 @@ def run_full(cfg: dict, weekly: bool = False, limit: int | None = None) -> dict:
                      "ret_5d": float(idx.iloc[-1] / idx.iloc[-6] - 1) * 100 if len(idx) > 5 else None,
                      "in_streak": in_streak})
 
+    # live READY journal (since go-live): display only
+    live_history = None
+    try:
+        from nsepattern.dashboard.build import find_password
+        sessions = pd.DatetimeIndex(nifty_c.dropna().index) if nifty_c is not None else pd.DatetimeIndex([])
+        live_history = livelog.update(prices, stocks, cfg, nifty5, mood_series, sessions, find_password())
+    except Exception as e:  # never let the journal break the scan
+        log.warning("live READY journal: %s", e)
+
     last = mood_hist.iloc[-1] if not mood_hist.empty else None
     mood = {
         "mood": None if last is None else last["mood"],
@@ -226,8 +232,8 @@ def run_full(cfg: dict, weekly: bool = False, limit: int | None = None) -> dict:
         "universe": len(syms), "with_prices": len(prices), "liquid": len(liquid), "movers": len(movers),
         "sources": sources, "mood": mood, "sector_heat": heat, "stocks": stocks,
         "research": {**research.summarise(research_rows, cfg["trading"]["target_pct"]),
-                     "flag_names": research.FLAG_NAMES, "recent_days": recent_days,
-                     "ready_history": ready_history},
+                     "flag_names": research.FLAG_NAMES},
+        "live_history": live_history,
     }
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out = jsonable(res)

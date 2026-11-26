@@ -3,8 +3,6 @@
 1. Loser study - five warning signs known on the buy day, and how often trades with each
    count of signs failed to reach the target within 30 days (3 years of history).
 2. Exit test - what different exit rules would have returned on the same past trades.
-3. Ready history - every recent time a stock's price reached its buy level (best tested and
-   your method), and what happened next (no time limit, like your own rule).
 
 Definitions (same as the backtest): buy price = P0 x (1 + level); fill on the first day the Low
 reaches it, at min(buy, Open); the target is checked from the next day with the day's High.
@@ -97,9 +95,8 @@ def _nifty5_at(nifty5: pd.Series | None, date) -> float | None:
     return None if v is None or pd.isna(v) else float(v)
 
 
-def stock_research(df: pd.DataFrame, a: dict, cfg: dict, nifty5: pd.Series | None,
-                   mood: pd.Series | None, recent_days: int) -> dict:
-    """History rows for the loser study / exit test, recent buy signals, and today's warning signs."""
+def stock_research(df: pd.DataFrame, a: dict, cfg: dict, nifty5: pd.Series | None) -> dict:
+    """History rows for the loser study / exit test, and today's warning signs."""
     p = cfg["pattern"]
     tgt = cfg["trading"]["target_pct"] / 100
     df = df.dropna(subset=["Open", "High", "Low", "Close"])
@@ -108,58 +105,31 @@ def stock_research(df: pd.DataFrame, a: dict, cfg: dict, nifty5: pd.Series | Non
     lv = {"best": (bt.get("best") or {}).get("level_pct"), "your": (bt.get("yours") or {}).get("level_pct")}
     streaks = find_streaks(df, p["pause_max_green_pct"], p["max_pauses"], p["min_down_days"])
     start = df.index.max() - pd.DateOffset(years=cfg["data"]["history_years"])
-    hist_rows, recent = [], []
+    hist_rows = []
     for s in streaks:
         p0_date = df.index[s.p0_idx]
-        is_recent = s.first_idx >= A.n - recent_days
-        if p0_date < start and not is_recent:
+        if p0_date < start:
             continue
-        sig = {}
-        for kind, level in lv.items():
-            if level is None:
-                continue
-            f, buy, fill = _fill(A, s, level)
-            if f is None:
-                continue
-            fd = df.index[f]
-            n5 = _nifty5_at(nifty5, fd)
-            fl = flags_at(A, f, buy, level, n5, True)
-            seg_h = A.h[f + 1:] / fill - 1
-            seg_l = A.lo[f + 1:] / fill - 1
-            seg_c = A.c[f + 1:] / fill - 1
-            hits = np.flatnonzero(seg_h >= tgt)
-            hit_day = int(hits[0]) + 1 if len(hits) else None
-            upto = hit_day if hit_day is not None else len(seg_l)
-            worst = float(min(0.0, A.lo[f] / fill - 1, float(seg_l[:upto].min()) if upto else 0.0))
-            if kind == "best" and p0_date >= start:
-                row = {"flags": len(fl), "fl": fl, "hit30": hit_day is not None and hit_day <= p["stats_window_days"],
-                       "known30": hit_day is not None or len(seg_c) >= p["stats_window_days"],
-                       "res30": tgt if (hit_day is not None and hit_day <= p["stats_window_days"]) else
-                       (float(seg_c[p["stats_window_days"] - 1]) if len(seg_c) >= p["stats_window_days"] else None)}
-                if len(seg_c) >= HOLD_CAP:  # a full year after the buy: usable for the exit test
-                    row["exits"] = [_exit(seg_h, seg_l, seg_c, tgt, sl, tm) for _, sl, tm in EXIT_RULES]
-                hist_rows.append(row)
-            if is_recent:
-                md = mood.asof(fd) if mood is not None and len(mood) else None
-                sig[kind] = {
-                    "date": str(fd.date()), "buy": buy, "fill": fill, "flags": fl,
-                    "mood": md if isinstance(md, str) else None,
-                    "hit_day": hit_day, "hit_date": str(df.index[f + hit_day].date()) if hit_day else None,
-                    "days": hit_day if hit_day else len(seg_c),
-                    "now_pct": None if hit_day else float(A.c[-1] / fill - 1) * 100,
-                    "worst_pct": worst * 100,
-                }
-        if is_recent and sig:
-            # first day the stock showed READY at the best tested level (touched, or closed within 0.75% above)
-            ready = None
-            if lv["best"] is not None:
-                b = s.p0 * (1 + lv["best"] / 100)
-                for i in range(s.first_idx, min(s.end_idx + 1, A.n - 1) + 1):
-                    if A.lo[i] <= b or A.c[i] <= b * (1 + cfg["status"]["ready_within_pct"] / 100):
-                        ready = str(df.index[i].date())
-                        break
-            recent.append({"p0_date": str(p0_date.date()), "p0": s.p0, "ready_date": ready,
-                           "depth_pct": s.depth_low * 100, "ongoing": s.ongoing, **sig})
+        level = lv["best"]
+        if level is None:
+            break
+        f, buy, fill = _fill(A, s, level)
+        if f is None:
+            continue
+        fl = flags_at(A, f, buy, level, _nifty5_at(nifty5, df.index[f]), True)
+        seg_h = A.h[f + 1:] / fill - 1
+        seg_l = A.lo[f + 1:] / fill - 1
+        seg_c = A.c[f + 1:] / fill - 1
+        hits = np.flatnonzero(seg_h >= tgt)
+        hit_day = int(hits[0]) + 1 if len(hits) else None
+        win = p["stats_window_days"]
+        hit30 = hit_day is not None and hit_day <= win
+        row = {"flags": len(fl), "fl": fl, "hit30": hit30, "known30": hit_day is not None or len(seg_c) >= win,
+               "res30": tgt if hit30 else (float(seg_c[win - 1]) if len(seg_c) >= win else None)}
+        if len(seg_c) >= HOLD_CAP:  # a full year after the buy: usable for the exit test
+            row["exits"] = [_exit(seg_h, seg_l, seg_c, tgt, sl, tm) for _, sl, tm in EXIT_RULES]
+        hist_rows.append(row)
+
     # today's warning signs for a stock in the buy zone (READY / GETTING CLOSE) at the best tested level
     today = None
     st = a.get("status") or {}
@@ -168,7 +138,7 @@ def stock_research(df: pd.DataFrame, a: dict, cfg: dict, nifty5: pd.Series | Non
         buy = st["best"]["buy_price"]
         fl = flags_at(A, last, buy, lv["best"], _nifty5_at(nifty5, df.index[last]), bool(st["best"].get("zone_touched_today")))
         today = {"flags": fl, "n": len(fl)}
-    return {"hist": hist_rows, "recent": recent, "today": today}
+    return {"hist": hist_rows, "today": today}
 
 
 def summarise(rows: list[dict], target_pct: float) -> dict:
