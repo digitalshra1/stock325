@@ -207,7 +207,7 @@ def run_full(cfg: dict, weekly: bool = False, limit: int | None = None) -> dict:
     try:
         from nsepattern.dashboard.build import find_password
         sessions = pd.DatetimeIndex(nifty_c.dropna().index) if nifty_c is not None else pd.DatetimeIndex([])
-        live_history = livelog.update(prices, stocks, cfg, nifty5, mood_series, sessions, find_password())
+        live_history = livelog.update(prices, stocks, cfg, nifty5, mood_series, sessions, find_password(), nifty=nifty_c)
     except Exception as e:  # never let the journal break the scan
         log.warning("live READY journal: %s", e)
 

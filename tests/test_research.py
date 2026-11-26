@@ -68,16 +68,17 @@ def test_live_journal_needs_password(tmp_path):
     assert livelog.update({}, {}, C, None, None, pd.DatetimeIndex([]), None, path=tmp_path / "x") is None
 
 
-def test_ready_spells_count_separately_after_a_break():
+def test_one_entry_per_fall_even_after_a_break():
     lg = livelog.empty_log("2026-01-01")
-    e = lambda d: {"symbol": "AAA", "p0_date": "2026-01-01", "p0": 100.0, "first_ready": d, "last_ready": d, "ready_count": 1}
+    e = lambda d, p0d="2026-01-01": {"symbol": "AAA", "p0_date": p0d, "p0": 100.0, "first_ready": d, "last_ready": d, "ready_count": 1}
     livelog._record(lg, "2026-01-05", {"AAA": e("2026-01-05")})
-    livelog._record(lg, "2026-01-06", {"AAA": e("2026-01-06")})     # still READY: same entry
+    livelog._record(lg, "2026-01-06", {"AAA": e("2026-01-06")})     # still READY
     livelog._record(lg, "2026-01-06", {"AAA": e("2026-01-06")})     # same day scanned twice: no change
     livelog._record(lg, "2026-01-07", {})                            # out of READY
-    livelog._record(lg, "2026-01-08", {"AAA": e("2026-01-08")})     # back in READY: new entry
+    livelog._record(lg, "2026-01-08", {"AAA": e("2026-01-08")})     # back in the same fall: same trade
+    livelog._record(lg, "2026-02-02", {"AAA": e("2026-02-02", "2026-01-28")})   # a new fall: new entry
     ents = sorted(lg["entries"].values(), key=lambda x: x["first_ready"])
-    assert [(x["first_ready"], x["ready_count"]) for x in ents] == [("2026-01-05", 2), ("2026-01-08", 1)]
+    assert [(x["first_ready"], x["ready_count"]) for x in ents] == [("2026-01-05", 3), ("2026-02-02", 1)]
 
 
 def test_stop_loss_test_uses_lowest_point_before_target():
@@ -89,3 +90,4 @@ def test_stop_loss_test_uses_lowest_point_before_target():
     # bought at 95 on the 94 day (opened 96), lowest next day 93*0.998 = 92.81 -> about -2.3% below the buy
     assert -2.5 < o["worst_pct"] < -2.0
     assert o["stops"]["2"]["r"] == "stop" and o["stops"]["3"]["r"] == "hit" and o["stops"]["5"]["r"] == "hit"
+    assert o["wait_days"] == 0 and o["low_date"] == str(df.index[83].date()) and o["best_pct"] >= 3.25
