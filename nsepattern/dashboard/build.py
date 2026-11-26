@@ -125,6 +125,12 @@ def build(res: dict, cfg: dict, password: str | None = None, positions: dict | N
             old.unlink()
         for k, v in buckets.items():
             (d / "details" / f"{k}.json").write_text(_blob(v, pw), encoding="utf-8")
+    # Ready history (research tab) is large: its own encrypted file, loaded when the tab is opened
+    rh = (data.get("research") or {}).pop("ready_history", None)
+    if rh is not None:
+        (d / "details").mkdir(exist_ok=True)
+        (d / "details" / "history.json").write_text(_blob(rh, pw), encoding="utf-8")
+        data["research"]["history_split"] = True
     # "</" must not appear raw inside the <script> tag
     blob = _blob(data, pw).replace("</", "<\\/")
     html = TEMPLATE.read_text(encoding="utf-8").replace("__PAYLOAD__", blob)

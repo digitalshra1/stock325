@@ -122,6 +122,10 @@ alerts:
   weak_buy_alerts: false      # Send buy alerts for WEAK-fundamental stocks (off: they stay in their own section)
   telegram_max_len: 4000      # Long messages are split at this many characters
 
+# ---------- Research (display only: never changes status, score, checks or alerts) ----------
+research:
+  recent_days: 120            # "Ready history" tab: buy-level touches in about the last this many trading days
+
 # =====================================================================
 #  ADD-ON MODULES (new layer; the settings above are unchanged)
 # =====================================================================

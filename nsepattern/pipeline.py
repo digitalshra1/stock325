@@ -24,6 +24,7 @@ from nsepattern.engine import checks as ck
 from nsepattern.engine.mood import MOOD_TICKERS, compute_mood_history, reasons_for
 from nsepattern.engine.mover import liquidity_crore, mover_scores, mover_stats, sheet_table
 from nsepattern.engine.profile import analyse_stock
+from nsepattern.engine import research
 
 log = logging.getLogger("nsepattern.pipeline")
 CANDIDATE = ("READY", "GETTING CLOSE")
@@ -129,6 +130,12 @@ def run_full(cfg: dict, weekly: bool = False, limit: int | None = None) -> dict:
     shp_cap = cfg["data"].get("shareholding_refresh_per_run", 250)
     shp_age = cfg["data"].get("shareholding_max_age_days", 30)
     shp_done = 0
+    nifty_c = mood_closes.get("nifty")
+    nifty5 = None if nifty_c is None else (nifty_c / nifty_c.shift(5) - 1) * 100
+    rcfg = cfg.get("research", {})
+    recent_days = int(rcfg.get("recent_days", 120))
+    research_rows: list[dict] = []
+    ready_history: list[dict] = []
     for i, s in enumerate(movers, 1):
         a = analyse_stock(prices[s], cfg, mood_series)
         age = nse.shareholding_age(s)
@@ -152,6 +159,15 @@ def run_full(cfg: dict, weekly: bool = False, limit: int | None = None) -> dict:
             "chart": _chart(prices[s], cfg),
             "sheet": sheet_table(prices[s], cfg, 20).reset_index(names="Date"),
         })
+        # research layer: display only (loser study, exit test, ready history, today's warning signs)
+        try:
+            rr = research.stock_research(prices[s], a, cfg, nifty5, mood_series, recent_days)
+            a["risk_today"] = rr["today"]
+            if g["grade"] != "WEAK":
+                research_rows.extend(rr["hist"])
+                ready_history.extend({"symbol": s, **x} for x in rr["recent"])
+        except Exception as e:  # never let research break the scan
+            log.warning("research %s: %s", s, e)
         stocks[s] = a
         if i % 50 == 0:
             log.info("Analysed %d / %d", i, len(movers))
@@ -209,6 +225,9 @@ def run_full(cfg: dict, weekly: bool = False, limit: int | None = None) -> dict:
         "data_date": max((a["last_date"] for a in stocks.values()), default=None),
         "universe": len(syms), "with_prices": len(prices), "liquid": len(liquid), "movers": len(movers),
         "sources": sources, "mood": mood, "sector_heat": heat, "stocks": stocks,
+        "research": {**research.summarise(research_rows, cfg["trading"]["target_pct"]),
+                     "flag_names": research.FLAG_NAMES, "recent_days": recent_days,
+                     "ready_history": ready_history},
     }
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out = jsonable(res)
