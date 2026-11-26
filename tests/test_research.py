@@ -66,3 +66,26 @@ def test_live_journal_records_once_per_fall_and_measures_outcome(tmp_path):
 
 def test_live_journal_needs_password(tmp_path):
     assert livelog.update({}, {}, C, None, None, pd.DatetimeIndex([]), None, path=tmp_path / "x") is None
+
+
+def test_ready_spells_count_separately_after_a_break():
+    lg = livelog.empty_log("2026-01-01")
+    e = lambda d: {"symbol": "AAA", "p0_date": "2026-01-01", "p0": 100.0, "first_ready": d, "last_ready": d, "ready_count": 1}
+    livelog._record(lg, "2026-01-05", {"AAA": e("2026-01-05")})
+    livelog._record(lg, "2026-01-06", {"AAA": e("2026-01-06")})     # still READY: same entry
+    livelog._record(lg, "2026-01-06", {"AAA": e("2026-01-06")})     # same day scanned twice: no change
+    livelog._record(lg, "2026-01-07", {})                            # out of READY
+    livelog._record(lg, "2026-01-08", {"AAA": e("2026-01-08")})     # back in READY: new entry
+    ents = sorted(lg["entries"].values(), key=lambda x: x["first_ready"])
+    assert [(x["first_ready"], x["ready_count"]) for x in ents] == [("2026-01-05", 2), ("2026-01-08", 1)]
+
+
+def test_stop_loss_test_uses_lowest_point_before_target():
+    closes = [100.0] * 80 + [98, 96, 94, 93] + [94, 95, 97, 98, 99]
+    df = _df(closes)
+    e = {"symbol": "AAA", "p0_date": str(df.index[79].date()), "p0": 100.0, "first_ready": str(df.index[82].date())}
+    o = livelog._outcome(df, e, -5.0, 0.0325, C)
+    assert o["bought"] and o["hit_day"] is not None
+    # bought at 95 on the 94 day (opened 96), lowest next day 93*0.998 = 92.81 -> about -2.3% below the buy
+    assert -2.5 < o["worst_pct"] < -2.0
+    assert o["stops"]["2"]["r"] == "stop" and o["stops"]["3"]["r"] == "hit" and o["stops"]["5"]["r"] == "hit"

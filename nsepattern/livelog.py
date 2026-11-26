@@ -1,12 +1,17 @@
 """Live READY journal (display only: never changes status, score, checks or alerts).
 
 Records, from the day the system went live, every stock the dashboard showed as READY on the
-main list (GOOD / UNKNOWN fundamentals, not excluded), once per fall. Each scan then measures
-what happened after, from the daily prices:
+main list (GOOD / UNKNOWN fundamentals, not excluded). One entry = one READY spell: consecutive
+READY days count once; if the stock leaves READY and comes back, that is a new entry. Each scan
+then measures what happened after, from the daily prices:
 
 * bought = the day's Low reached the buy level (best tested or your method), from the first
   READY day until the day after that fall ended (same rule as the backtest), at min(buy, Open);
-* hit = +target reached by the day's High from the next day on, with no time limit (your rule).
+* hit = +target reached by the day's High from the next day on, with no time limit (your rule);
+* lowest = the lowest Low from the buy (the buy day included: the price passes the buy level
+  before it can go lower) until the target day, or until now;
+* stop-loss test (2/3/4/5 %): stopped if that lowest point reached the stop before the target
+  (a stop and the target on the same day counts as stopped, the cautious choice).
 
 The journal is saved encrypted (APP_PASSWORD) in data/state, like the other state files. If a
 scan was missed, the next one rebuilds the missing days with the same rules (marked "rebuilt").
@@ -33,8 +38,12 @@ def log_path(cfg: dict):
     return ROOT / cfg.get("research", {}).get("live_log_file", "data/state/readylog.enc.json")
 
 
+LOG_VERSION = 2
+STOPS = (2, 3, 4, 5)
+
+
 def empty_log(since: str) -> dict:
-    return {"version": 1, "since": since, "days": {}, "entries": {}}
+    return {"version": LOG_VERSION, "since": since, "days": {}, "entries": {}, "open": {}}
 
 
 def _entry(s: str, a: dict, d: str, cfg: dict, nifty5, mood, df: pd.DataFrame, rebuilt: bool) -> dict:
@@ -48,20 +57,27 @@ def _entry(s: str, a: dict, d: str, cfg: dict, nifty5, mood, df: pd.DataFrame, r
         fl = research.flags_at(A, i, st["best"]["buy_price"], lv_b, research._nifty5_at(nifty5, df.index[i]),
                                bool(st["best"].get("zone_touched_today")))
     md = mood.asof(df.index[i]) if mood is not None and len(mood) else None
-    return {"symbol": s, "p0_date": st.get("p0_date"), "p0": st.get("p0"), "first_ready": d, "ready_days": [d],
+    return {"symbol": s, "p0_date": st.get("p0_date"), "p0": st.get("p0"), "first_ready": d, "last_ready": d, "ready_count": 1,
             "best_level": lv_b, "your_level": lv_y, "flags": fl, "mood": md if isinstance(md, str) else None,
             "grade": a["grade"]["grade"], "industry": a.get("industry"), "rebuilt": rebuilt}
 
 
 def _record(lg: dict, d: str, ready: dict[str, dict]) -> None:
+    """Consecutive READY days extend the same entry; a READY day after a break starts a new one."""
+    prev = max((x for x in lg["days"] if x < d), default=None)
     lg["days"][d] = sorted(ready)
     for s, e in ready.items():
-        k = f"{s}|{e['p0_date']}"
-        if k in lg["entries"]:
-            if d not in lg["entries"][k]["ready_days"]:
-                lg["entries"][k]["ready_days"].append(d)
+        k = lg["open"].get(s)
+        cur = lg["entries"].get(k) if k else None
+        if cur and cur["last_ready"] == d:      # this day was already recorded (scan ran twice)
+            continue
+        if cur and cur["last_ready"] == prev and cur["p0_date"] == e["p0_date"]:
+            cur["last_ready"] = d
+            cur["ready_count"] += 1
         else:
+            k = f"{s}|{d}"
             lg["entries"][k] = e
+            lg["open"][s] = k
 
 
 def _replay_day(d: pd.Timestamp, prices: dict, stocks: dict, cfg: dict, nifty5, mood) -> dict[str, dict]:
@@ -96,6 +112,8 @@ def update(prices: dict, stocks: dict, cfg: dict, nifty5, mood, sessions: pd.Dat
     since = str(rc.get("live_since", "2026-11-11"))
     path = path or log_path(cfg)
     lg = _load(path, password, empty_log(since))
+    if lg.get("version") != LOG_VERSION:   # older layout: start again (missed days are rebuilt below)
+        lg = empty_log(since)
     lg["since"] = since
     sess = [d for d in sessions if str(d.date()) >= since]
     if not sess:
@@ -141,10 +159,15 @@ def _outcome(df: pd.DataFrame, e: dict, level: float | None, tgt: float, cfg: di
     hits = np.flatnonzero(seg_h >= tgt)
     hd = int(hits[0]) + 1 if len(hits) else None
     upto = f + 1 + (hd if hd else len(seg_h))
-    worst = float(min(0.0, lo[f:upto].min() / fill - 1)) * 100
+    dips = lo[f:upto] / fill - 1                      # buy day .. target day (or today)
+    worst = float(min(0.0, dips.min())) * 100
+    stops = {}
+    for sl in STOPS:
+        k = np.flatnonzero(dips <= -sl / 100)
+        stops[str(sl)] = {"r": "stop", "day": int(k[0])} if len(k) else {"r": "hit" if hd else "open"}
     return {"buy": buy, "bought": True, "date": str(idx[f].date()), "fill": fill, "hit_day": hd,
             "hit_date": str(idx[f + hd].date()) if hd else None, "days": hd if hd else len(seg_h),
-            "now_pct": None if hd else float(cl[-1] / fill - 1) * 100, "worst_pct": worst}
+            "now_pct": None if hd else float(cl[-1] / fill - 1) * 100, "worst_pct": worst, "stops": stops}
 
 
 def view(lg: dict, prices: dict, cfg: dict) -> dict:
@@ -156,10 +179,10 @@ def view(lg: dict, prices: dict, cfg: dict) -> dict:
             continue
         df = df.dropna(subset=["Open", "High", "Low", "Close"])
         r = {k: e[k] for k in ("symbol", "p0_date", "p0", "first_ready", "flags", "mood", "grade", "industry", "rebuilt")}
-        r["ready_count"] = len(e["ready_days"])
+        r["ready_count"] = e["ready_count"]
+        r["last_ready"] = e["last_ready"]
         r["best"] = _outcome(df, e, e.get("best_level"), tgt, cfg)
         r["your"] = _outcome(df, e, e.get("your_level"), tgt, cfg)
         rows.append(r)
-    days = [{"date": d, "ready": len(v), "new": sum(1 for e in lg["entries"].values() if e["first_ready"] == d)}
-            for d, v in sorted(lg["days"].items())]
-    return {"since": lg["since"], "days": days, "rows": rows, "updated": str(date.today())}
+    return {"since": lg["since"], "sessions": len(lg["days"]), "stops": list(STOPS), "rows": rows,
+            "updated": str(date.today())}

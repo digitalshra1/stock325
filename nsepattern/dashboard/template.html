@@ -1022,88 +1022,89 @@ function allCols(){
 }
 function pageHistory(q){
   const L = D.live_history, lvl = q.get("lvl")==="your" ? "your" : "best", only = q.get("f")||"all", sym = (q.get("s")||"").toUpperCase();
-  const W = 30, tgt = CFG.target;
-  let h = `<h1>Ready history${ti("Every stock the dashboard showed as READY (main list) since the system went live, once per fall, and what happened next. Bought = the day’s low reached the buy level, from the first READY day until the day after that fall ended. Hit = +"+tgt+"% reached by the day’s high, from the next day, with no time limit (your rule). Display only: nothing here changes signals or alerts.")}</h1>`;
+  const tgt = CFG.target;
+  let h = `<h1>Ready history${ti("Every time a stock entered READY on the main list since the system went live. Staying READY for several days counts once; leaving READY and coming back counts again. Bought = the day’s low reached your buy level. Hit = +"+tgt+"% reached afterwards (no time limit). Display only: nothing here changes signals or alerts.")}</h1>`;
   if(!L || !L.rows) return h + `<p class="lead">Since the system went live</p>` + dashTabs() + `<div class="card empty">The live READY journal starts with the next evening scan.</div>`;
-  h += `<p class="lead">Since ${esc(L.since)} (system live) · ${L.days.length} trading day${L.days.length===1?"":"s"} recorded${sym?` · <b>${esc(sym)}</b> <a href="#/history?lvl=${lvl}">show all stocks</a>`:""}</p>` + dashTabs();
-  const outcome = x => !x ? "na" : !x.bought ? (x.window_open ? "waiting" : "missed") : x.hit_day ? "hit" : x.days > W ? "late" : "open";
+  h += `<p class="lead">Since ${esc(L.since)} (system live) · ${L.sessions} trading day${L.sessions===1?"":"s"}${sym?` · <b>${esc(sym)}</b> <a href="#/history?lvl=${lvl}">show all stocks</a>`:""}</p>` + dashTabs();
+  const outcome = x => !x ? "na" : !x.bought ? "notbought" : x.hit_day ? "hit" : "open";
   const all = L.rows.filter(r => !sym || r.symbol===sym).map(r => ({...r, x:r[lvl], o:outcome(r[lvl])}));
   if(!all.length) return h + `<div class="card empty">No READY stock recorded yet${sym?" for "+esc(sym):""}.</div>`;
   const sel = (k, cur, opts) => `<select onchange="const u=new URLSearchParams(location.hash.split('?')[1]||'');u.set('${k}',this.value);location.hash='#/history?'+u">${opts.map(([v,l])=>`<option value="${v}" ${cur===v?"selected":""}>${l}</option>`).join("")}</select>`;
-  const by = o => all.filter(r=>r.o===o);
-  const bought = all.filter(r=>r.x?.bought), hit = by("hit"), open = by("open"), late = by("late");
-  const dec = hit.length + late.length;
-  const med = a => { if(!a.length) return null; const s=[...a].sort((x,y)=>x-y), m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+  const bought = all.filter(r=>r.x?.bought), hit = all.filter(r=>r.o==="hit"), open = all.filter(r=>r.o==="open"), nb = all.filter(r=>r.o==="notbought");
   const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
   const fl = k => `#/history?lvl=${lvl}&f=${k}${sym?"&s="+encodeURIComponent(sym):""}`;
   const card = (l, v, s, tip, link) => `<div class="card kpi hov${link?" clk":""}"${link?go(link,"Show these"):""}><div class="l">${l}${tip?ti(tip):""}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
-  const hrOf = k => { const rr=L.rows.filter(r=>r[k]?.bought&&(!sym||r.symbol===sym)), hh=rr.filter(r=>r[k].hit_day).length; return rr.length?Math.round(hh/rr.length*100)+"%":"N/A"; };
-  h += `<div class="sticky"><div class="row">Buy level ${sel("lvl", lvl, [["best","Best tested"],["your","Your method"]])} Show ${sel("f", only, [["all","All READY"],["hit","Hit +"+tgt+"%"],["open","Bought, still open"],["late","Open more than "+W+" days"],["missed","Not bought"],["waiting","Not bought yet (still falling)"]])}</div></div>`;
+  h += `<div class="sticky"><div class="row">Buy level ${sel("lvl", lvl, [["best","Best tested"],["your","Your method"]])} Show ${sel("f", only, [["all","All"],["hit","Hit +"+tgt+"%"],["open","Bought, still open"],["notbought","Not bought"]])}</div></div>`;
   h += `<div class="g k4" style="margin-top:12px">
-    ${card("Went READY", all.length, `${new Set(all.map(r=>r.symbol)).size} stocks · counted once per fall`, "Stocks shown as READY on the main list (good or unknown fundamentals, not excluded).")}
-    ${card("Bought at buy level", bought.length, `${all.length?Math.round(bought.length/all.length*100):0}% of READY · the low reached the buy price`, "READY can also mean the close was within 0.75% above the buy price without touching it: those are not counted as bought.")}
-    ${card("Hit +"+tgt+"%", hit.length, bought.length?`<b>${Math.round(hit.length/bought.length*100)}%</b> of bought · ${hit.filter(r=>r.x.hit_day<=5).length} within 5 days`:"", "No time limit: a trade that is still open is not a loss yet.", fl("hit"))}
-    ${card("Still open", open.length+late.length, (open.length+late.length)?`now ${pctTxt(avg([...open,...late].map(r=>r.x.now_pct)),1)} on average${late.length?` · ${late.length} over ${W} days`:""}`:"none", "Bought, target not reached yet.", fl("open"))}
-  </div><div class="g k4" style="margin-top:12px">
-    ${card("Not bought", by("missed").length + by("waiting").length, `${by("missed").length} fall ended above the buy price · ${by("waiting").length} still falling`, "", fl("missed"))}
-    ${card("Median days to hit", hit.length?num(med(hit.map(r=>r.x.hit_day)),0):"N/A", "trading days after buying")}
-    ${card("Avg worst dip", bought.length?pctTxt(avg(bought.map(r=>r.x.worst_pct)),1):"N/A", "lowest point before the target (or until now)")}
-    ${card("Best vs yours", hrOf("best")+" / "+hrOf("your"), "hit rate of bought: best tested / your method")}
+    ${card("Went READY", all.length, `times · ${new Set(all.map(r=>r.symbol)).size} stocks`, "Each entry into READY counts once, however many days it stays READY.", fl("all"))}
+    ${card("Bought", bought.length, `the low reached the buy price · ${nb.length} not bought`, "READY also includes a close within 0.75% above the buy price without touching it: those are ‘not bought’.", fl("notbought"))}
+    ${card("Hit +"+tgt+"%", hit.length, bought.length?`<b>${Math.round(hit.length/bought.length*100)}%</b> of bought · ${hit.filter(r=>r.x.hit_day<=5).length} within 5 days`:"", "", fl("hit"))}
+    ${card("Still open", open.length, open.length?`now ${pctTxt(avg(open.map(r=>r.x.now_pct)),1)} on average`:"none", "Bought, target not reached yet (not a loss: no time limit).", fl("open"))}
   </div>`;
-  // day by day
-  h += `<div class="g two" style="margin-top:12px"><div><h2>Day by day</h2>` + grid([
-    {h:"Date", v:d=>d.date, f:d=>`<b>${esc(d.date)}</b>`}, {h:"READY that day", num:1, v:d=>d.ready, f:d=>d.ready},
-    {h:"New READY", num:1, tip:"First READY day of that fall.", v:d=>d.new, f:d=>d.new},
-    {h:"Of the new: hit", num:1, v:d=>d.hit, f:d=>d.newb?`${d.hit}/${d.newb}<span class="sub">bought</span>`:"–"}],
-    [...L.days].reverse().map(d=>{ const nn=all.filter(r=>r.first_ready===d.date); return {...d, newb:nn.filter(r=>r.x?.bought).length, hit:nn.filter(r=>r.o==="hit").length}; })) + `</div>`;
-  // by warning signs at the first READY day
-  const grp = (key, label) => { const m={}; all.forEach(r=>{const k=key(r); (m[k] ||= []).push(r);});
-    return grid([{h:label, v:g=>g.k, f:g=>esc(g.k)}, {h:"READY", num:1, v:g=>g.r.length, f:g=>g.r.length},
-      {h:"Bought", num:1, v:g=>g.b, f:g=>g.b}, {h:"Hit", num:1, v:g=>g.hit, f:g=>g.hit}, {h:"Open", num:1, v:g=>g.open, f:g=>g.open},
-      {h:"Hit rate", num:1, tip:"Hit ÷ bought.", v:g=>g.hr, f:g=>g.hr==null?NA:`<b>${g.hr.toFixed(0)}%</b>`},
-      {h:"Avg worst dip", num:1, v:g=>g.dip, f:g=>pct(g.dip,1)}],
-      Object.keys(m).sort().map(k=>{ const r=m[k], b=r.filter(x=>x.x?.bought), hh=r.filter(x=>x.o==="hit").length;
-        return {k, r, b:b.length, hit:hh, open:r.filter(x=>x.o==="open"||x.o==="late").length, hr:b.length?hh/b.length*100:null, dip:avg(b.map(x=>x.x.worst_pct))}; })); };
-  h += `<div><h2>By warning signs on the first READY day</h2>${grp(r=>{const n=(r.flags||[]).length; return n>=3?"3+ signs (High)":n===2?"2 signs (Medium)":n+" sign"+(n===1?"":"s")+" (Low)";}, "Warning signs")}
-    <h2>By market mood</h2>${grp(r=>r.mood||"Unknown", "Mood")}</div></div>`;
-  // per stock
-  const per = {}; all.forEach(r => (per[r.symbol] ||= []).push(r));
-  if(!sym) h += `<h2>Per stock (${Object.keys(per).length})</h2>` + grid([C.star,
-    {h:"Stock", v:g=>g.s, f:g=>`<a href="#/history?lvl=${lvl}&s=${encodeURIComponent(g.s)}"><b>${esc(g.s)}</b></a><span class="sub">${esc(g.r[0].industry||"")}</span>`},
-    C.fund, {h:"Times READY", num:1, tip:"Separate falls in which the stock went READY.", v:g=>g.r.length, f:g=>g.r.length},
-    {h:"Bought", num:1, v:g=>g.b, f:g=>g.b}, {h:"Hit", num:1, v:g=>g.hit, f:g=>g.hit}, {h:"Open", num:1, v:g=>g.open, f:g=>g.open},
-    {h:"Hit rate", num:1, v:g=>g.hr, f:g=>g.hr==null?NA:`<b>${g.hr.toFixed(0)}%</b>`},
-    {h:"Avg days to hit", num:1, v:g=>g.days, f:g=>num(g.days,1)},
-    {h:"Last READY", v:g=>g.last, f:g=>esc(g.last)}, C.hits],
-    Object.entries(per).map(([s,r])=>{ const b=r.filter(x=>x.x?.bought), hh=r.filter(x=>x.o==="hit");
-      return {s, symbol:s, r, b:b.length, hit:hh.length, open:r.filter(x=>x.o==="open"||x.o==="late").length, hr:b.length?hh.length/b.length*100:null,
-        days:avg(hh.map(x=>x.x.hit_day)), last:r.map(x=>x.first_ready).sort().pop()}; })
-    .sort((a,b)=>b.r.length-a.r.length || (b.hr??-1)-(a.hr??-1)), {empty:"Nothing here."});
-  // every READY stock
-  const list = all.filter(r => only==="all" || r.o===only || (only==="open" && r.o==="late")).sort((a,b)=>b.first_ready.localeCompare(a.first_ready) || a.symbol.localeCompare(b.symbol));
+
+  // stop-loss test
+  if(bought.length){
+    const rowsSL = [{name:"No stop loss (your rule)", sl:null}, ...(L.stops||[2,3,4,5]).map(s=>({name:`Stop loss −${s}%`, sl:s}))].map(r=>{
+      const res = bought.map(b => r.sl==null ? (b.x.hit_day?"hit":"open") : b.x.stops?.[r.sl]?.r);
+      const st = res.filter(x=>x==="stop").length, hi = res.filter(x=>x==="hit").length, op = res.filter(x=>x==="open").length;
+      const net = hi*tgt - st*(r.sl||0), openNow = bought.filter((b,i)=>res[i]==="open").map(b=>b.x.now_pct);
+      return {...r, st, hi, op, wr: hi+st ? hi/(hi+st)*100 : null, net, per: hi+st ? net/(hi+st) : null, on: avg(openNow)};
+    });
+    h += `<h2>Stop-loss test${ti("For every bought entry: would a stop this far below your buy price have been hit before the +"+tgt+"% target? Uses the lowest price from the buy day until the target (or until now). If the stop and the target fall on the same day, it counts as stopped. Before brokerage and taxes.")}</h2>` + grid([
+      {h:"Rule", v:r=>r.sl??0, f:r=>`<b>${esc(r.name)}</b>`},
+      {h:"Stopped out", num:1, v:r=>r.st, f:r=>r.sl==null?'<span class="muted">–</span>':r.st?`<span class="neg">${r.st}</span>`:"0"},
+      {h:"Hit target", num:1, v:r=>r.hi, f:r=>r.hi},
+      {h:"Still open", num:1, v:r=>r.op, f:r=>r.op},
+      {h:"Open trades now", num:1, tip:"Average profit or loss today of the trades still open under this rule (not included in the win rate or total).", v:r=>r.on, f:r=>r.on==null?'<span class="muted">–</span>':pct(r.on,1)},
+      {h:"Win rate", num:1, tip:"Hit ÷ (hit + stopped). Open trades are not counted yet.", v:r=>r.wr, f:r=>r.wr==null?NA:`<b>${r.wr.toFixed(0)}%</b>`},
+      {h:"Total result", num:1, tip:"Hits × +"+tgt+"% minus stops × the stop %, added up (open trades not counted).", v:r=>r.net, f:r=>pct(r.net,1)},
+      {h:"Per closed trade", num:1, v:r=>r.per, f:r=>r.per==null?NA:pct(r.per,2)}], rowsSL);
+    // how low it went
+    const B = [[0,-1,"0 to −1%"],[-1,-2,"−1% to −2%"],[-2,-3,"−2% to −3%"],[-3,-4,"−3% to −4%"],[-4,-5,"−4% to −5%"],[-5,-1e9,"More than −5%"]];
+    h += `<h2>How low it went after buying${ti("Lowest price from the buy day until the target was reached (or until now), compared with your buy price.")}</h2>` + grid([
+      {h:"Lowest point below the buy", v:r=>-r.i, f:r=>`<b>${r.l}</b>`},
+      {h:"Trades", num:1, v:r=>r.n, f:r=>r.n},
+      {h:"Hit target anyway", num:1, v:r=>r.hi, f:r=>r.hi},
+      {h:"Still open", num:1, v:r=>r.op, f:r=>r.op},
+      {h:"Share of bought", num:1, v:r=>r.n, f:r=>`${Math.round(r.n/bought.length*100)}%`}],
+      B.map(([a,b,l],i)=>{ const rr=bought.filter(r=>r.x.worst_pct<=a && r.x.worst_pct>b); return {i,l,n:rr.length,hi:rr.filter(r=>r.o==="hit").length,op:rr.filter(r=>r.o==="open").length}; }));
+  }
+
+  // every entry
+  const list = all.filter(r => only==="all" || r.o===only).sort((a,b)=>b.first_ready.localeCompare(a.first_ready) || a.symbol.localeCompare(b.symbol));
   const res = r => r.o==="hit" ? `<span class="pill GOOD">Hit in ${r.x.hit_day} day${r.x.hit_day>1?"s":""}</span><span class="sub">${esc(r.x.hit_date)}</span>`
-    : r.o==="open"||r.o==="late" ? `<span class="pill ${r.o==="late"?"risk-H":"CAUTION"}">${r.x.days?`Open ${r.x.days} day${r.x.days===1?"":"s"}`:"Bought today"}</span><span class="sub">now ${pctTxt(r.x.now_pct,1)}</span>`
-    : r.o==="waiting" ? `<span class="pill FORMING">Not bought yet</span><span class="sub">still falling · low came within ${pctTxt(r.x.closest_pct,1)}</span>`
-    : r.o==="missed" ? `<span class="pill risk-M">Not bought</span><span class="sub">lowest was ${pctTxt(r.x.closest_pct,1)} above the buy</span>` : NA;
-  h += `<h2>Every READY stock (${list.length})</h2>` + grid([C.star,
+    : r.o==="open" ? `<span class="pill CAUTION">${r.x.days?`Open ${r.x.days} day${r.x.days===1?"":"s"}`:"Bought today"}</span><span class="sub">now ${pctTxt(r.x.now_pct,1)}</span>`
+    : r.o==="notbought" ? `<span class="pill risk-M">Not bought</span><span class="sub">low stayed ${pctTxt(r.x.closest_pct,1)} above the buy</span>` : NA;
+  const low = r => { if(!r.x?.bought) return '<span class="muted">–</span>'; const w=r.x.worst_pct, s=(L.stops||[2,3,4,5]).filter(k=>r.x.stops?.[k]?.r==="stop");
+    return `${pct(w,1)}${s.length?`<span class="sub">−${s.join("/−")}% stop hit</span>`:""}`; };
+  h += `<h2>Every READY entry (${list.length})</h2>` + grid([C.star,
     {h:"Stock", v:r=>r.symbol, f:r=>stockLink(r.symbol, r.industry||"")}, C.fund,
-    {h:"Fall started", v:r=>r.p0_date, f:r=>`${esc(r.p0_date)}<span class="sub">P0 ${rs(r.p0)}</span>`},
-    {h:"First READY", v:r=>r.first_ready, f:r=>`<b>${esc(r.first_ready)}</b>${r.rebuilt?`<span class="sub" title="This day's scan was missed; rebuilt later from prices with the same rules.">rebuilt</span>`:""}`},
+    {h:"Entered READY", v:r=>r.first_ready, f:r=>`<b>${esc(r.first_ready)}</b>${r.rebuilt?`<span class="sub" title="That day's scan did not run; rebuilt later from prices with the same rules.">rebuilt</span>`:""}`},
     {h:"Days READY", num:1, v:r=>r.ready_count, f:r=>r.ready_count},
-    {h:"Buy price", num:1, v:r=>r.x?.fill??r.x?.buy, f:r=>r.x?`${rs(r.x.fill??r.x.buy)}${r.x.bought&&r.x.fill<r.x.buy-0.005?`<span class="sub">opened below ${rs(r.x.buy)}</span>`:""}`:NA},
+    {h:"Buy price", num:1, v:r=>r.x?.fill??r.x?.buy, f:r=>r.x?rs(r.x.fill??r.x.buy):NA},
     {h:"Bought on", v:r=>r.x?.date, f:r=>r.x?.date?esc(r.x.date):'<span class="muted">–</span>'},
-    {h:"Target", num:1, v:r=>r.x?.fill, f:r=>r.x?.bought?rs(r.x.fill*(1+tgt/100)):'<span class="muted">–</span>'},
-    {h:"Result", v:r=>({hit:0,open:1,late:2,waiting:3,missed:4,na:5})[r.o]*1000+(r.x?.days||0), f:res},
-    {h:"Worst dip", num:1, v:r=>r.x?.worst_pct, f:r=>r.x?.bought?pct(r.x.worst_pct,1):'<span class="muted">–</span>'},
+    {h:"Lowest after buy", num:1, tip:"Lowest price from the buy day until the target (or until now), vs your buy price, and which test stop losses it would have hit.", v:r=>r.x?.worst_pct, f:low},
+    {h:"Result", v:r=>({hit:0,open:1,notbought:2,na:3})[r.o]*1000+(r.x?.days||0), f:res},
     {h:"Warning signs", tip:C.risk.tip, v:r=>(r.flags||[]).length, f:r=>riskHtml(r.flags||[], false)},
-    {h:"Mood", v:r=>r.mood, f:r=>r.mood?pill(r.mood):NA},
     C.hits], list, {empty:"Nothing matches."});
-  h += researchHtml();
+
+  // per stock (folded)
+  const per = {}; all.forEach(r => (per[r.symbol] ||= []).push(r));
+  if(!sym && Object.keys(per).length) h += `<details style="margin-top:14px"><summary>Per stock (${Object.keys(per).length})</summary>` + grid([C.star,
+    {h:"Stock", v:g=>g.s, f:g=>`<a href="#/history?lvl=${lvl}&s=${encodeURIComponent(g.s)}"><b>${esc(g.s)}</b></a>`},
+    C.fund, {h:"Times READY", num:1, v:g=>g.r.length, f:g=>g.r.length},
+    {h:"Bought", num:1, v:g=>g.b, f:g=>g.b}, {h:"Hit", num:1, v:g=>g.hit, f:g=>g.hit}, {h:"Open", num:1, v:g=>g.open, f:g=>g.open},
+    {h:"Lowest after buy", num:1, v:g=>g.low, f:g=>g.low==null?'<span class="muted">–</span>':pct(g.low,1)}],
+    Object.entries(per).map(([s,r])=>{ const b=r.filter(x=>x.x?.bought);
+      return {s, symbol:s, r, b:b.length, hit:r.filter(x=>x.o==="hit").length, open:r.filter(x=>x.o==="open").length, low:b.length?Math.min(...b.map(x=>x.x.worst_pct)):null}; })
+    .sort((a,b)=>b.r.length-a.r.length), {empty:"Nothing here."}) + `</details>`;
+  const rh = researchHtml();
+  if(rh) h += `<details style="margin-top:14px"><summary>Reference: 3-year research on past data</summary>${rh}</details>`;
   return h;
 }
 function researchHtml(){
   const R = RS(); if(!R.by_count) return "";
-  let h = `<h2 style="margin-top:28px">Reference: 3-year research on past data — what the losers had in common${ti("All past trades at each stock’s best tested level over 3 years (weak fundamentals left out). A ‘miss’ = did not reach +"+CFG.target+"% within 30 days. Every warning sign is measured on the buy day, so it could have been known then.")}</h2>
+  let h = `<h2>What the losers had in common${ti("All past trades at each stock’s best tested level over 3 years (weak fundamentals left out). A ‘miss’ = did not reach +"+CFG.target+"% within 30 days. Every warning sign is measured on the buy day, so it could have been known then.")}</h2>
     <p class="small muted" style="margin-top:-6px">${nf0.format(R.trades)} past trades · overall ${R.overall.loss_rate.toFixed(1)}% missed</p><div class="g two">`;
   h += `<div>` + grid([{h:"Warning signs on the buy day", v:r=>r.n, f:r=>`<b>${esc(r.label)}</b> ${riskLvl(r.n)?`<span class="pill risk-${riskLvl(r.n)[0]}">${riskLvl(r.n)}</span>`:""}`},
     {h:"Trades", num:1, v:r=>r.trades, f:r=>nf0.format(r.trades)},
